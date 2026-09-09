@@ -1,10 +1,20 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, Trash2, CheckCircle2, Circle, Pencil, Eye } from "lucide-react";
 import Markdown from "react-markdown";
-import { api, type Ticket, type TicketInput, type Project, type Team, type Subtask } from "../api/client";
+import { api, type Ticket, type TicketInput, type Project, type Team, type Subtask, type Label } from "../api/client";
 import { STATUSES, STATUS_LABELS } from "../constants/statuses";
+import LabelPicker from "./LabelPicker";
 
 const PRIORITIES = ["urgent", "high", "medium", "low"];
+
+const mergeLabels = (current: Label[], incoming: Label[]) => {
+  const seen = new Set<string>();
+  return [...current, ...incoming].filter((label) => {
+    if (seen.has(label.id)) return false;
+    seen.add(label.id);
+    return true;
+  });
+};
 
 export default function TicketPanel({
   ticket,
@@ -18,7 +28,7 @@ export default function TicketPanel({
   projects: Project[];
   teams: Team[];
   onClose: () => void;
-  onUpdate: (id: string, data: TicketInput) => void;
+  onUpdate: (id: string, data: TicketInput) => Promise<void>;
   onDelete: (id: string) => void;
 }) {
   const [title, setTitle] = useState(ticket.title);
@@ -31,19 +41,80 @@ export default function TicketPanel({
   const [newSubtask, setNewSubtask] = useState("");
   const [dirty, setDirty] = useState(false);
   const [descMode, setDescMode] = useState<"preview" | "write">(description ? "preview" : "write");
+  const [labelIds, setLabelIds] = useState((ticket.labels || []).map((l) => l.id));
+  const [allLabels, setAllLabels] = useState<Label[]>(() =>
+    mergeLabels([], ticket.labels || []),
+  );
+  const [labelsLoading, setLabelsLoading] = useState(true);
+  const [labelsError, setLabelsError] = useState("");
+  const [labelBusy, setLabelBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const labelBusyRef = useRef(false);
+  const savingRef = useRef(false);
+  const editVersionRef = useRef(0);
 
-  const markDirty = () => setDirty(true);
+  useEffect(() => {
+    let cancelled = false;
+    api.labels
+      .list()
+      .then((ls) => {
+        if (cancelled) return;
+        setAllLabels((prev) => mergeLabels(prev, ls || []));
+        setLabelsLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLabelsError("Could not load all labels.");
+        setLabelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const handleSave = () => {
-    onUpdate(ticket.id, {
-      title,
-      description,
-      status,
-      priority,
-      dueDate: dueDate || undefined,
-      teamId: teamId || undefined,
-    });
-    setDirty(false);
+  const handleCreateLabel = async (name: string, color: string) => {
+    labelBusyRef.current = true;
+    setLabelBusy(true);
+    try {
+      const created = await api.labels.create({ name, color });
+      setAllLabels((prev) => mergeLabels(prev, [created]));
+      return created;
+    } finally {
+      labelBusyRef.current = false;
+      setLabelBusy(false);
+    }
+  };
+
+  const markDirty = () => {
+    editVersionRef.current += 1;
+    setDirty(true);
+    setSaveError("");
+  };
+
+  const handleSave = async () => {
+    if (savingRef.current || labelBusyRef.current) return;
+    const editVersion = editVersionRef.current;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onUpdate(ticket.id, {
+        title,
+        description,
+        status,
+        priority,
+        dueDate: dueDate || undefined,
+        teamId: teamId || undefined,
+        labels: labelIds,
+      });
+      if (editVersionRef.current === editVersion) setDirty(false);
+    } catch {
+      setSaveError("Could not save changes. Please try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   const handleAddSubtask = async (e: React.FormEvent) => {
@@ -236,13 +307,44 @@ export default function TicketPanel({
             </div>
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">
+              Labels
+            </label>
+            <LabelPicker
+              allLabels={allLabels}
+              selectedIds={labelIds}
+              onChange={(ids) => {
+                setLabelIds(ids);
+                markDirty();
+              }}
+              onCreate={handleCreateLabel}
+            />
+            {labelsLoading && (
+              <p className="mt-1.5 text-xs text-slate-500">Loading labels…</p>
+            )}
+            {labelsError && (
+              <p role="alert" className="mt-1.5 text-xs text-red-400">
+                {labelsError}
+              </p>
+            )}
+          </div>
+
           {dirty && (
-            <button
-              onClick={handleSave}
-              className="w-full px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-            >
-              Save Changes
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={handleSave}
+                disabled={saving || labelBusy}
+                className="w-full px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg transition-colors"
+              >
+                {saving ? "Saving…" : "Save Changes"}
+              </button>
+              {saveError && (
+                <p role="alert" className="text-xs text-red-400">
+                  {saveError}
+                </p>
+              )}
+            </div>
           )}
 
           <div>
