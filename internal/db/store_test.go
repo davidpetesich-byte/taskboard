@@ -315,3 +315,20 @@ func TestResolveLabelIDsAcceptsIDAndCaseInsensitiveName(t *testing.T) {
 		t.Fatalf("unknown label error = %v, want ErrLabelNotFound", err)
 	}
 }
+
+func TestResolveLabelIDsRejectsAmbiguousName(t *testing.T) {
+	s := newTestStore(t)
+	first := newTestLabel(t, s, "Blocked")
+	newTestLabel(t, s, "blocked")
+
+	_, err := s.ResolveLabelIDs([]string{"BLOCKED"})
+	if !errors.Is(err, ErrLabelReferenceAmbiguous) {
+		t.Fatalf("duplicate-name resolve error = %v, want ErrLabelReferenceAmbiguous", err)
+	}
+
+	// An exact ID still resolves even when the name is ambiguous.
+	ids, err := s.ResolveLabelIDs([]string{first.ID})
+	if err != nil || len(ids) != 1 || ids[0] != first.ID {
+		t.Fatalf("resolve by ID with duplicate names = %v, %v", ids, err)
+	}
+}

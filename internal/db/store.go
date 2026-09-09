@@ -578,9 +578,14 @@ func (s *Store) ListLabels() ([]models.Label, error) {
 // neither a label ID nor a label name.
 var ErrLabelNotFound = errors.New("label not found")
 
+// ErrLabelReferenceAmbiguous is returned when a case-insensitive label name
+// matches more than one label. Callers must not guess which was intended;
+// the exact label ID always resolves.
+var ErrLabelReferenceAmbiguous = errors.New("label reference is ambiguous")
+
 // ResolveLabelIDs maps each reference (a label ID, or a case-insensitive label
-// name) to a label ID, preserving order. Names are matched after IDs; with
-// duplicate names the first in ListLabels order (alphabetical) wins.
+// name) to a label ID, preserving order. IDs are matched first; a name that
+// matches more than one label is an error rather than a guess.
 func (s *Store) ResolveLabelIDs(refs []string) ([]string, error) {
 	labels, err := s.ListLabels()
 	if err != nil {
@@ -596,11 +601,15 @@ func (s *Store) ResolveLabelIDs(refs []string) ([]string, error) {
 			}
 		}
 		if id == "" {
+			matches := 0
 			for _, l := range labels {
 				if strings.EqualFold(l.Name, ref) {
+					matches++
 					id = l.ID
-					break
 				}
+			}
+			if matches > 1 {
+				return nil, fmt.Errorf("%w: %q matches %d labels; use the label ID", ErrLabelReferenceAmbiguous, ref, matches)
 			}
 		}
 		if id == "" {
