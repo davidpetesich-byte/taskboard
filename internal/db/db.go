@@ -29,7 +29,9 @@ func OpenAt(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("creating db directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
+	// busy_timeout makes a CLI write that collides with a server write wait
+	// (up to 5s) instead of failing immediately with SQLITE_BUSY.
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}

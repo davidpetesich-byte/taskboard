@@ -226,3 +226,14 @@ func TestUpdateTicketWithUnknownLabelKeepsExistingLabels(t *testing.T) {
 		t.Errorf("labels = %v, want unchanged %v", ids, []string{labelA.ID})
 	}
 }
+
+func TestOpenAtSetsBusyTimeout(t *testing.T) {
+	s := newTestStore(t)
+	var ms int
+	if err := s.db.QueryRow("PRAGMA busy_timeout").Scan(&ms); err != nil {
+		t.Fatalf("reading busy_timeout: %v", err)
+	}
+	if ms != 5000 {
+		t.Fatalf("busy_timeout = %d, want 5000", ms)
+	}
+}
