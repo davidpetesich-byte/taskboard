@@ -102,6 +102,9 @@ func ticketCommands() *cobra.Command {
 				req.Description = *desc
 			}
 			if createDue != "" {
+				if err := validateDue(createDue); err != nil {
+					return err
+				}
 				req.DueDate = &createDue
 			}
 			if createTeam != "" {
@@ -238,6 +241,9 @@ func ticketCommands() *cobra.Command {
 				req.Priority = &upPriority
 			}
 			if cmd.Flags().Changed("due") {
+				if err := validateDue(upDue); err != nil {
+					return err
+				}
 				req.DueDate = &upDue
 			}
 			if cmd.Flags().Changed("team") {

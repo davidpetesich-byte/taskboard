@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/tcarac/taskboard/internal/db"
@@ -54,6 +55,15 @@ func validatePriority(priority string) error {
 		}
 	}
 	return fmt.Errorf("invalid priority %q (valid: %s)", priority, strings.Join(priorities, ", "))
+}
+
+// validateDue checks a --due value is YYYY-MM-DD. The store silently ignores
+// an unparseable date, which would let an agent believe it set one.
+func validateDue(due string) error {
+	if _, err := time.Parse("2006-01-02", due); err != nil {
+		return fmt.Errorf("invalid due date %q (want YYYY-MM-DD)", due)
+	}
+	return nil
 }
 
 // descriptionFromFlags returns the description supplied through --description
