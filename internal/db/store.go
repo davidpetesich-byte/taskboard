@@ -344,15 +344,15 @@ func (s *Store) CreateTicket(req models.CreateTicketRequest) (*models.Ticket, er
 		return nil, err
 	}
 
-	if len(req.Labels) > 0 {
-		for _, labelID := range req.Labels {
-			s.db.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", t.ID, labelID)
+	for _, labelID := range req.Labels {
+		if _, err := s.db.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", t.ID, labelID); err != nil {
+			return nil, fmt.Errorf("attaching label %s: %w", labelID, err)
 		}
 	}
 
-	if len(req.BlockedBy) > 0 {
-		for _, blockerID := range req.BlockedBy {
-			s.db.Exec("INSERT OR IGNORE INTO ticket_dependencies (ticket_id, blocked_by_id) VALUES (?, ?)", t.ID, blockerID)
+	for _, blockerID := range req.BlockedBy {
+		if _, err := s.db.Exec("INSERT OR IGNORE INTO ticket_dependencies (ticket_id, blocked_by_id) VALUES (?, ?)", t.ID, blockerID); err != nil {
+			return nil, fmt.Errorf("adding dependency %s: %w", blockerID, err)
 		}
 	}
 
@@ -400,16 +400,24 @@ func (s *Store) UpdateTicket(id string, req models.UpdateTicketRequest) (*models
 	}
 
 	if req.Labels != nil {
-		s.db.Exec("DELETE FROM ticket_labels WHERE ticket_id = ?", id)
+		if _, err := s.db.Exec("DELETE FROM ticket_labels WHERE ticket_id = ?", id); err != nil {
+			return nil, fmt.Errorf("clearing labels: %w", err)
+		}
 		for _, labelID := range req.Labels {
-			s.db.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", id, labelID)
+			if _, err := s.db.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", id, labelID); err != nil {
+				return nil, fmt.Errorf("attaching label %s: %w", labelID, err)
+			}
 		}
 	}
 
 	if req.BlockedBy != nil {
-		s.db.Exec("DELETE FROM ticket_dependencies WHERE ticket_id = ?", id)
+		if _, err := s.db.Exec("DELETE FROM ticket_dependencies WHERE ticket_id = ?", id); err != nil {
+			return nil, fmt.Errorf("clearing dependencies: %w", err)
+		}
 		for _, blockerID := range req.BlockedBy {
-			s.db.Exec("INSERT OR IGNORE INTO ticket_dependencies (ticket_id, blocked_by_id) VALUES (?, ?)", id, blockerID)
+			if _, err := s.db.Exec("INSERT OR IGNORE INTO ticket_dependencies (ticket_id, blocked_by_id) VALUES (?, ?)", id, blockerID); err != nil {
+				return nil, fmt.Errorf("adding dependency %s: %w", blockerID, err)
+			}
 		}
 	}
 

@@ -3,6 +3,7 @@ package db
 import (
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/tcarac/taskboard/internal/models"
@@ -28,6 +29,24 @@ func newTestProject(t *testing.T, s *Store) *models.Project {
 		t.Fatalf("creating test project: %v", err)
 	}
 	return project
+}
+
+func newTestLabel(t *testing.T, s *Store, name string) *models.Label {
+	t.Helper()
+
+	label, err := s.CreateLabel(models.CreateLabelRequest{Name: name, Color: "#EF4444"})
+	if err != nil {
+		t.Fatalf("creating label: %v", err)
+	}
+	return label
+}
+
+func labelIDs(labels []models.Label) []string {
+	ids := make([]string, len(labels))
+	for i, label := range labels {
+		ids[i] = label.ID
+	}
+	return ids
 }
 
 func TestOpenAtRunsMigrations(t *testing.T) {
@@ -86,4 +105,68 @@ func TestTicketInReviewLandsInReviewColumn(t *testing.T) {
 		return
 	}
 	t.Errorf("in_review column not found")
+}
+
+func TestUpdateTicketWithUnknownLabelReturnsError(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{ProjectID: project.ID, Title: "Ticket"})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+
+	_, err = s.UpdateTicket(ticket.ID, models.UpdateTicketRequest{Labels: []string{"DOES-NOT-EXIST"}})
+	if err == nil {
+		t.Fatal("updating ticket with an unknown label returned nil error")
+	}
+}
+
+func TestCreateTicketWithUnknownLabelReturnsError(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+
+	_, err := s.CreateTicket(models.CreateTicketRequest{
+		ProjectID: project.ID,
+		Title:     "Ticket",
+		Labels:    []string{"DOES-NOT-EXIST"},
+	})
+	if err == nil {
+		t.Fatal("creating ticket with an unknown label returned nil error")
+	}
+}
+
+func TestLabelRoundTripReplacesNotAppends(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	labelA := newTestLabel(t, s, "A")
+	labelB := newTestLabel(t, s, "B")
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{ProjectID: project.ID, Title: "Ticket"})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		labels []string
+		want   []string
+	}{
+		{name: "A", labels: []string{labelA.ID}, want: []string{labelA.ID}},
+		{name: "A and B", labels: []string{labelA.ID, labelB.ID}, want: []string{labelA.ID, labelB.ID}},
+		{name: "B", labels: []string{labelB.ID}, want: []string{labelB.ID}},
+		{name: "empty", labels: []string{}, want: []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			updated, err := s.UpdateTicket(ticket.ID, models.UpdateTicketRequest{Labels: tc.labels})
+			if err != nil {
+				t.Fatalf("updating ticket labels: %v", err)
+			}
+
+			got := labelIDs(updated.Labels)
+			sort.Strings(got)
+			sort.Strings(tc.want)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("label IDs = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
