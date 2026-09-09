@@ -88,20 +88,24 @@ func ticketCommands() *cobra.Command {
 
 	var moveStatus string
 	moveCmd := &cobra.Command{
-		Use:   "move [id]",
-		Short: "Move ticket to different status",
+		Use:   "move [ref]",
+		Short: "Move ticket to a different status (ref is an ID or display key like WEB-12)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store, err := openStore()
 			if err != nil {
 				return err
 			}
-			t, err := store.MoveTicket(args[0], models.MoveTicketRequest{Status: moveStatus})
+			if err := validateStatus(moveStatus); err != nil {
+				return err
+			}
+			id, err := store.ResolveTicketID(args[0])
 			if err != nil {
 				return err
 			}
-			if t == nil {
-				return fmt.Errorf("ticket not found")
+			t, err := store.MoveTicket(id, models.MoveTicketRequest{Status: moveStatus})
+			if err != nil {
+				return err
 			}
 			return emit(cmd, t, func() {
 				fmt.Fprintf(cmd.OutOrStdout(), "Moved %s to %s\n", t.DisplayKey(), t.Status)
@@ -112,7 +116,7 @@ func ticketCommands() *cobra.Command {
 	moveCmd.MarkFlagRequired("status")
 
 	deleteCmd := &cobra.Command{
-		Use:   "delete [id]",
+		Use:   "delete [ref]",
 		Short: "Delete a ticket",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -120,10 +124,14 @@ func ticketCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := store.DeleteTicket(args[0]); err != nil {
+			id, err := store.ResolveTicketID(args[0])
+			if err != nil {
 				return err
 			}
-			return emit(cmd, deleted(args[0]), func() {
+			if err := store.DeleteTicket(id); err != nil {
+				return err
+			}
+			return emit(cmd, deleted(id), func() {
 				fmt.Fprintln(cmd.OutOrStdout(), "Ticket deleted.")
 			})
 		},

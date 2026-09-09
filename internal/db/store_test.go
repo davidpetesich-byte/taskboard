@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -8,6 +9,37 @@ import (
 
 	"github.com/tcarac/taskboard/internal/models"
 )
+
+func TestResolveTicketIDAcceptsIDAndDisplayKey(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s) // prefix TST
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{ProjectID: project.ID, Title: "Ticket"})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+
+	for _, ref := range []string{ticket.ID, "TST-1", "tst-1"} {
+		got, err := s.ResolveTicketID(ref)
+		if err != nil {
+			t.Errorf("ResolveTicketID(%q): %v", ref, err)
+			continue
+		}
+		if got != ticket.ID {
+			t.Errorf("ResolveTicketID(%q) = %q, want %q", ref, got, ticket.ID)
+		}
+	}
+}
+
+func TestResolveTicketIDUnknownReturnsErrTicketNotFound(t *testing.T) {
+	s := newTestStore(t)
+	newTestProject(t, s)
+	for _, ref := range []string{"TST-99", "NOPE-1", "not-a-key", "01ZZZZZZZZZZZZZZZZZZZZZZZZ"} {
+		_, err := s.ResolveTicketID(ref)
+		if !errors.Is(err, ErrTicketNotFound) {
+			t.Errorf("ResolveTicketID(%q) error = %v, want ErrTicketNotFound", ref, err)
+		}
+	}
+}
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()

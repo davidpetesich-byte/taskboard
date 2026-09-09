@@ -108,3 +108,32 @@ func TestRuntimeErrorDoesNotPrintUsage(t *testing.T) {
 		t.Fatalf("usage text printed on a runtime error:\n%s", out)
 	}
 }
+
+func TestTicketMoveAndDeleteByDisplayKey(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	var created models.Ticket
+	env.runJSON(&created, "ticket", "create", "--project", p.ID, "--title", "First")
+
+	var moved models.Ticket
+	env.runJSON(&moved, "ticket", "move", "SMK-1", "--status", "in_review")
+	if moved.ID != created.ID || moved.Status != "in_review" {
+		t.Fatalf("move by key returned %+v", moved)
+	}
+
+	out, err := env.run("ticket", "move", "SMK-1", "--status", "nope")
+	if err == nil || !strings.Contains(out, "invalid status") {
+		t.Fatalf("move with bad status: err=%v out=%q", err, out)
+	}
+
+	var del map[string]any
+	env.runJSON(&del, "ticket", "delete", "smk-1")
+	if del["deleted"] != true || del["id"] != created.ID {
+		t.Fatalf("delete by key returned %v", del)
+	}
+	var remaining []models.Ticket
+	env.runJSON(&remaining, "ticket", "list")
+	if len(remaining) != 0 {
+		t.Fatalf("ticket still listed after delete: %+v", remaining)
+	}
+}

@@ -3,7 +3,10 @@ package db
 import (
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -297,6 +300,49 @@ func (s *Store) GetTicket(id string) (*models.Ticket, error) {
 	t.BlockedBy, _ = s.getTicketBlockedBy(t.ID)
 
 	return &t, nil
+}
+
+// ErrTicketNotFound is returned by ResolveTicketID when neither an ID nor a
+// display key matches a ticket.
+var ErrTicketNotFound = errors.New("ticket not found")
+
+// displayKeyRE splits a display key such as WEB-12 into prefix and number.
+// The prefix is everything before the last dash.
+var displayKeyRE = regexp.MustCompile(`^(.+)-(\d+)$`)
+
+// ResolveTicketID accepts a ticket ID or a display key (project prefix, dash,
+// ticket number; the prefix is matched case-insensitively) and returns the
+// ticket ID. The ID is tried first so a ULID never falls through to the key
+// parser.
+func (s *Store) ResolveTicketID(ref string) (string, error) {
+	var id string
+	err := s.db.QueryRow("SELECT id FROM tickets WHERE id = ?", ref).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", err
+	}
+
+	m := displayKeyRE.FindStringSubmatch(ref)
+	if m == nil {
+		return "", ErrTicketNotFound
+	}
+	number, err := strconv.Atoi(m[2])
+	if err != nil {
+		return "", ErrTicketNotFound
+	}
+	err = s.db.QueryRow(
+		`SELECT t.id FROM tickets t JOIN projects p ON p.id = t.project_id
+		WHERE UPPER(p.prefix) = UPPER(?) AND t.number = ?`, m[1], number,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", ErrTicketNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 func (s *Store) CreateTicket(req models.CreateTicketRequest) (*models.Ticket, error) {
