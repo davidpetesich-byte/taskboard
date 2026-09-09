@@ -170,3 +170,59 @@ func TestLabelRoundTripReplacesNotAppends(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateTicketWithUnknownLabelLeavesNoOrphanTicket(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+
+	_, err := s.CreateTicket(models.CreateTicketRequest{
+		ProjectID: project.ID,
+		Title:     "Ticket",
+		Labels:    []string{"DOES-NOT-EXIST"},
+	})
+	if err == nil {
+		t.Fatal("creating ticket with an unknown label returned nil error")
+	}
+
+	var count int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM tickets WHERE project_id = ?", project.ID).Scan(&count); err != nil {
+		t.Fatalf("counting tickets: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no ticket rows after failed create, got %d", count)
+	}
+}
+
+func TestUpdateTicketWithUnknownLabelKeepsExistingLabels(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	labelA := newTestLabel(t, s, "A")
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{
+		ProjectID: project.ID,
+		Title:     "Ticket",
+		Labels:    []string{labelA.ID},
+	})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+
+	newTitle := "Renamed"
+	_, err = s.UpdateTicket(ticket.ID, models.UpdateTicketRequest{
+		Title:  &newTitle,
+		Labels: []string{labelA.ID, "DOES-NOT-EXIST"},
+	})
+	if err == nil {
+		t.Fatal("updating ticket with an unknown label returned nil error")
+	}
+
+	got, err := s.GetTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("getting ticket: %v", err)
+	}
+	if got.Title != "Ticket" {
+		t.Errorf("title = %q, want unchanged %q", got.Title, "Ticket")
+	}
+	if ids := labelIDs(got.Labels); !reflect.DeepEqual(ids, []string{labelA.ID}) {
+		t.Errorf("labels = %v, want unchanged %v", ids, []string{labelA.ID})
+	}
+}

@@ -335,7 +335,15 @@ func (s *Store) CreateTicket(req models.CreateTicketRequest) (*models.Ticket, er
 		}
 	}
 
-	_, err = s.db.Exec(
+	// The ticket row and its label/dependency rows are written in one
+	// transaction so a bad label or blocker ID cannot leave an orphan ticket.
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
 		`INSERT INTO tickets (id, project_id, team_id, number, title, description, status, priority, due_date, position, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, t.ProjectID, t.TeamID, t.Number, t.Title, t.Description, t.Status, t.Priority, t.DueDate, t.Position, t.CreatedAt, t.UpdatedAt,
@@ -345,15 +353,19 @@ func (s *Store) CreateTicket(req models.CreateTicketRequest) (*models.Ticket, er
 	}
 
 	for _, labelID := range req.Labels {
-		if _, err := s.db.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", t.ID, labelID); err != nil {
+		if _, err := tx.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", t.ID, labelID); err != nil {
 			return nil, fmt.Errorf("attaching label %s: %w", labelID, err)
 		}
 	}
 
 	for _, blockerID := range req.BlockedBy {
-		if _, err := s.db.Exec("INSERT OR IGNORE INTO ticket_dependencies (ticket_id, blocked_by_id) VALUES (?, ?)", t.ID, blockerID); err != nil {
+		if _, err := tx.Exec("INSERT OR IGNORE INTO ticket_dependencies (ticket_id, blocked_by_id) VALUES (?, ?)", t.ID, blockerID); err != nil {
 			return nil, fmt.Errorf("adding dependency %s: %w", blockerID, err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	return s.GetTicket(t.ID)
@@ -391,7 +403,15 @@ func (s *Store) UpdateTicket(id string, req models.UpdateTicketRequest) (*models
 	}
 	t.UpdatedAt = time.Now()
 
-	_, err = s.db.Exec(
+	// All writes share one transaction: labels are replaced with DELETE+INSERT,
+	// so a failed INSERT must roll the DELETE back rather than wipe the set.
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
 		`UPDATE tickets SET team_id=?, title=?, description=?, status=?, priority=?, due_date=?, position=?, updated_at=? WHERE id=?`,
 		t.TeamID, t.Title, t.Description, t.Status, t.Priority, t.DueDate, t.Position, t.UpdatedAt, t.ID,
 	)
@@ -400,25 +420,29 @@ func (s *Store) UpdateTicket(id string, req models.UpdateTicketRequest) (*models
 	}
 
 	if req.Labels != nil {
-		if _, err := s.db.Exec("DELETE FROM ticket_labels WHERE ticket_id = ?", id); err != nil {
+		if _, err := tx.Exec("DELETE FROM ticket_labels WHERE ticket_id = ?", id); err != nil {
 			return nil, fmt.Errorf("clearing labels: %w", err)
 		}
 		for _, labelID := range req.Labels {
-			if _, err := s.db.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", id, labelID); err != nil {
+			if _, err := tx.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", id, labelID); err != nil {
 				return nil, fmt.Errorf("attaching label %s: %w", labelID, err)
 			}
 		}
 	}
 
 	if req.BlockedBy != nil {
-		if _, err := s.db.Exec("DELETE FROM ticket_dependencies WHERE ticket_id = ?", id); err != nil {
+		if _, err := tx.Exec("DELETE FROM ticket_dependencies WHERE ticket_id = ?", id); err != nil {
 			return nil, fmt.Errorf("clearing dependencies: %w", err)
 		}
 		for _, blockerID := range req.BlockedBy {
-			if _, err := s.db.Exec("INSERT OR IGNORE INTO ticket_dependencies (ticket_id, blocked_by_id) VALUES (?, ?)", id, blockerID); err != nil {
+			if _, err := tx.Exec("INSERT OR IGNORE INTO ticket_dependencies (ticket_id, blocked_by_id) VALUES (?, ?)", id, blockerID); err != nil {
 				return nil, fmt.Errorf("adding dependency %s: %w", blockerID, err)
 			}
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	return s.GetTicket(id)
