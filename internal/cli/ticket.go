@@ -107,6 +107,9 @@ func ticketCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if t == nil {
+				return fmt.Errorf("ticket not found")
+			}
 			return emit(cmd, t, func() {
 				fmt.Fprintf(cmd.OutOrStdout(), "Moved %s to %s\n", t.DisplayKey(), t.Status)
 			})

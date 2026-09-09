@@ -306,6 +306,11 @@ func (s *Store) GetTicket(id string) (*models.Ticket, error) {
 // display key matches a ticket.
 var ErrTicketNotFound = errors.New("ticket not found")
 
+// ErrTicketReferenceAmbiguous is returned when a case-insensitive display key
+// matches more than one ticket, such as when project prefixes differ only by
+// case. Callers must not guess which ticket was intended.
+var ErrTicketReferenceAmbiguous = errors.New("ticket reference is ambiguous")
+
 // displayKeyRE splits a display key such as WEB-12 into prefix and number.
 // The prefix is everything before the last dash.
 var displayKeyRE = regexp.MustCompile(`^(.+)-(\d+)$`)
@@ -332,15 +337,19 @@ func (s *Store) ResolveTicketID(ref string) (string, error) {
 	if err != nil {
 		return "", ErrTicketNotFound
 	}
+	var matches int
 	err = s.db.QueryRow(
-		`SELECT t.id FROM tickets t JOIN projects p ON p.id = t.project_id
+		`SELECT COUNT(*), COALESCE(MIN(t.id), '') FROM tickets t JOIN projects p ON p.id = t.project_id
 		WHERE UPPER(p.prefix) = UPPER(?) AND t.number = ?`, m[1], number,
-	).Scan(&id)
-	if err == sql.ErrNoRows {
-		return "", ErrTicketNotFound
-	}
+	).Scan(&matches, &id)
 	if err != nil {
 		return "", err
+	}
+	if matches == 0 {
+		return "", ErrTicketNotFound
+	}
+	if matches > 1 {
+		return "", fmt.Errorf("%w: %q matches multiple tickets", ErrTicketReferenceAmbiguous, ref)
 	}
 	return id, nil
 }

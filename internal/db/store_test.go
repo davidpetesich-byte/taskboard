@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/tcarac/taskboard/internal/models"
@@ -38,6 +39,31 @@ func TestResolveTicketIDUnknownReturnsErrTicketNotFound(t *testing.T) {
 		if !errors.Is(err, ErrTicketNotFound) {
 			t.Errorf("ResolveTicketID(%q) error = %v, want ErrTicketNotFound", ref, err)
 		}
+	}
+}
+
+func TestResolveTicketIDRejectsAmbiguousDisplayKey(t *testing.T) {
+	s := newTestStore(t)
+	upper, err := s.CreateProject(models.CreateProjectRequest{Name: "Upper", Prefix: "DUP"})
+	if err != nil {
+		t.Fatalf("creating upper-case project: %v", err)
+	}
+	lower, err := s.CreateProject(models.CreateProjectRequest{Name: "Lower", Prefix: "dup"})
+	if err != nil {
+		t.Fatalf("creating lower-case project: %v", err)
+	}
+	for _, project := range []*models.Project{upper, lower} {
+		if _, err := s.CreateTicket(models.CreateTicketRequest{ProjectID: project.ID, Title: project.Name}); err != nil {
+			t.Fatalf("creating ticket for %s: %v", project.Name, err)
+		}
+	}
+
+	id, err := s.ResolveTicketID("DuP-1")
+	if !errors.Is(err, ErrTicketReferenceAmbiguous) || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("ResolveTicketID(DuP-1) = %q, %v; want an ambiguity error", id, err)
+	}
+	if id != "" {
+		t.Fatalf("ambiguous reference selected ticket %q", id)
 	}
 }
 
