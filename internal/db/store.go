@@ -443,51 +443,60 @@ func (s *Store) UpdateTicketWithLabelDelta(id string, req models.UpdateTicketReq
 }
 
 func (s *Store) updateTicket(id string, req models.UpdateTicketRequest, addLabelIDs, removeLabelIDs []string) (*models.Ticket, error) {
-	t, err := s.GetTicket(id)
-	if err != nil || t == nil {
-		return nil, err
+	setClauses := []string{"updated_at=?"}
+	args := []any{time.Now()}
+	if req.TeamID != nil {
+		setClauses = append(setClauses, "team_id=?")
+		args = append(args, *req.TeamID)
 	}
-
 	if req.Title != nil {
-		t.Title = *req.Title
+		setClauses = append(setClauses, "title=?")
+		args = append(args, *req.Title)
 	}
 	if req.Description != nil {
-		t.Description = *req.Description
+		setClauses = append(setClauses, "description=?")
+		args = append(args, *req.Description)
 	}
 	if req.Status != nil {
-		t.Status = *req.Status
+		setClauses = append(setClauses, "status=?")
+		args = append(args, *req.Status)
 	}
 	if req.Priority != nil {
-		t.Priority = *req.Priority
+		setClauses = append(setClauses, "priority=?")
+		args = append(args, *req.Priority)
 	}
 	if req.Position != nil {
-		t.Position = *req.Position
-	}
-	if req.TeamID != nil {
-		t.TeamID = req.TeamID
+		setClauses = append(setClauses, "position=?")
+		args = append(args, *req.Position)
 	}
 	if req.DueDate != nil {
 		parsed, err := time.Parse("2006-01-02", *req.DueDate)
 		if err == nil {
-			t.DueDate = &parsed
+			setClauses = append(setClauses, "due_date=?")
+			args = append(args, parsed)
 		}
 	}
-	t.UpdatedAt = time.Now()
+	args = append(args, id)
 
-	// All writes share one transaction: labels are replaced with DELETE+INSERT,
-	// so a failed INSERT must roll the DELETE back rather than wipe the set.
+	// Only explicitly requested fields are written, so a partial update cannot
+	// clobber an unrelated field changed by another writer. Labels and blockers
+	// share the transaction so any failed relationship write rolls fields back.
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(
-		`UPDATE tickets SET team_id=?, title=?, description=?, status=?, priority=?, due_date=?, position=?, updated_at=? WHERE id=?`,
-		t.TeamID, t.Title, t.Description, t.Status, t.Priority, t.DueDate, t.Position, t.UpdatedAt, t.ID,
-	)
+	result, err := tx.Exec("UPDATE tickets SET "+strings.Join(setClauses, ", ")+" WHERE id=?", args...)
 	if err != nil {
 		return nil, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if affected == 0 {
+		return nil, nil
 	}
 
 	if req.Labels != nil {

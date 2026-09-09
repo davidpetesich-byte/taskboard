@@ -371,6 +371,106 @@ func TestUpdateTicketWithLabelDeltaRollsBackFieldsOnInvalidLabel(t *testing.T) {
 	}
 }
 
+func TestUpdateTicketWithLabelDeltaPreservesFieldChangedDuringUpdate(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	label := newTestLabel(t, s, "Added")
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{
+		ProjectID: project.ID,
+		Title:     "Original",
+		Priority:  "medium",
+	})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+
+	// Simulate an unrelated field write interleaved immediately before this
+	// update. A stale full-row rewrite resets priority to medium; a targeted
+	// update leaves the independently changed field alone.
+	_, err = s.db.Exec(`CREATE TRIGGER change_priority_before_ticket_update
+		BEFORE UPDATE ON tickets
+		BEGIN
+			UPDATE tickets SET priority = 'urgent' WHERE id = NEW.id;
+		END`)
+	if err != nil {
+		t.Fatalf("creating interleaved field trigger: %v", err)
+	}
+
+	updated, err := s.UpdateTicketWithLabelDelta(ticket.ID, models.UpdateTicketRequest{}, []string{label.ID}, nil)
+	if err != nil {
+		t.Fatalf("applying label-only delta: %v", err)
+	}
+	if updated.Priority != "urgent" {
+		t.Fatalf("priority = %q, want interleaved value urgent", updated.Priority)
+	}
+	if ids := labelIDs(updated.Labels); !reflect.DeepEqual(ids, []string{label.ID}) {
+		t.Fatalf("labels = %v, want %v", ids, []string{label.ID})
+	}
+}
+
+func TestUpdateTicketChangesOnlyRequestedFields(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	label := newTestLabel(t, s, "Keep label")
+	blocker, err := s.CreateTicket(models.CreateTicketRequest{ProjectID: project.ID, Title: "Blocker"})
+	if err != nil {
+		t.Fatalf("creating blocker: %v", err)
+	}
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{
+		ProjectID:   project.ID,
+		Title:       "Original",
+		Description: "Keep me",
+		Status:      "in_review",
+		Priority:    "high",
+		Labels:      []string{label.ID},
+		BlockedBy:   []string{blocker.ID},
+	})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+
+	newTitle := "Renamed"
+	updated, err := s.UpdateTicket(ticket.ID, models.UpdateTicketRequest{Title: &newTitle})
+	if err != nil {
+		t.Fatalf("updating title: %v", err)
+	}
+	if updated.Title != newTitle || updated.Description != "Keep me" || updated.Status != "in_review" || updated.Priority != "high" {
+		t.Fatalf("partial update changed unrequested fields: %+v", updated)
+	}
+	if ids := labelIDs(updated.Labels); !reflect.DeepEqual(ids, []string{label.ID}) {
+		t.Fatalf("nil labels changed label set to %v", ids)
+	}
+	if !reflect.DeepEqual(updated.BlockedBy, []string{blocker.ID}) {
+		t.Fatalf("nil blockedBy changed dependencies to %v", updated.BlockedBy)
+	}
+
+	cleared, err := s.UpdateTicket(ticket.ID, models.UpdateTicketRequest{Labels: []string{}, BlockedBy: []string{}})
+	if err != nil {
+		t.Fatalf("clearing relationships: %v", err)
+	}
+	if len(cleared.Labels) != 0 || len(cleared.BlockedBy) != 0 {
+		t.Fatalf("empty relationship slices did not clear: labels=%v blockedBy=%v", cleared.Labels, cleared.BlockedBy)
+	}
+}
+
+func TestUpdateTicketMissingReturnsNil(t *testing.T) {
+	s := newTestStore(t)
+	title := "No ticket"
+	for _, update := range []func() (*models.Ticket, error){
+		func() (*models.Ticket, error) {
+			return s.UpdateTicket("missing", models.UpdateTicketRequest{Title: &title})
+		},
+		func() (*models.Ticket, error) {
+			return s.UpdateTicketWithLabelDelta("missing", models.UpdateTicketRequest{}, []string{"missing-label"}, nil)
+		},
+	} {
+		got, err := update()
+		if err != nil || got != nil {
+			t.Fatalf("missing update = %+v, %v; want nil, nil", got, err)
+		}
+	}
+}
+
 func TestOpenAtSetsBusyTimeout(t *testing.T) {
 	s := newTestStore(t)
 	var ms int
