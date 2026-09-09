@@ -20,10 +20,11 @@ clean:
 	rm -rf web/dist web/node_modules
 
 install: build
-	cp $(BINARY) /usr/local/bin/
+	mkdir -p $(HOME)/.local/bin
+	cp $(BINARY) $(HOME)/.local/bin/
 
 dev-frontend:
 	cd web && npm run dev
 
 test:
-	go test ./...
+	go test ./internal/...
