@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -24,7 +24,7 @@ import {
   Users,
   Plus,
 } from "lucide-react";
-import { api, type Ticket, type TicketInput, type Project, type Team, type BoardColumn } from "../api/client";
+import { api, type Ticket, type TicketInput, type Project, type Team, type BoardColumn, type Label } from "../api/client";
 import TicketPanel from "../components/TicketPanel";
 import CreateTicketModal from "../components/CreateTicketModal";
 import LabelChip from "../components/LabelChip";
@@ -238,20 +238,62 @@ export default function Board() {
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [createForStatus, setCreateForStatus] = useState<string | null>(null);
+  const [filterLabelId, setFilterLabelId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadRequestGeneration = useRef(0);
+
+  const labelsInPlay = useMemo(() => {
+    const labelsById = new Map<string, Label>();
+
+    for (const column of columns) {
+      for (const ticket of column.tickets) {
+        for (const label of ticket.labels || []) {
+          labelsById.set(label.id, label);
+        }
+      }
+    }
+
+    return Array.from(labelsById.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+  }, [columns]);
+
+  const effectiveFilterLabelId = labelsInPlay.some(
+    (label) => label.id === filterLabelId
+  )
+    ? filterLabelId
+    : null;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
   const loadBoard = useCallback(async () => {
+    const requestGeneration = ++loadRequestGeneration.current;
+
     try {
       const board = await api.board.get(selectedProject || undefined);
-      setColumns(board.columns || []);
+      if (requestGeneration !== loadRequestGeneration.current) return;
+
+      const nextColumns = board.columns || [];
+      setColumns(nextColumns);
+      setFilterLabelId((current) =>
+        current &&
+        nextColumns.some((column) =>
+          column.tickets.some((ticket) =>
+            ticket.labels?.some((label) => label.id === current)
+          )
+        )
+          ? current
+          : null
+      );
     } catch {
+      if (requestGeneration !== loadRequestGeneration.current) return;
+
       setColumns(
         STATUSES.map((status) => ({ status, tickets: [] }))
       );
+      setFilterLabelId(null);
     }
     setLoading(false);
   }, [selectedProject]);
@@ -266,8 +308,13 @@ export default function Board() {
     loadBoard();
   }, [loadBoard]);
 
-  const getColumnTickets = (status: string) =>
-    columns.find((c) => c.status === status)?.tickets || [];
+  const getColumnTickets = (status: string) => {
+    const tickets = columns.find((c) => c.status === status)?.tickets || [];
+    if (!effectiveFilterLabelId) return tickets;
+    return tickets.filter((ticket) =>
+      ticket.labels?.some((label) => label.id === effectiveFilterLabelId)
+    );
+  };
 
   const findTicketById = (id: UniqueIdentifier): Ticket | undefined => {
     for (const col of columns) {
@@ -371,6 +418,40 @@ export default function Board() {
           ))}
         </select>
       </header>
+
+      {labelsInPlay.length > 0 && (
+        <div
+          role="group"
+          aria-labelledby="board-label-filter-label"
+          className="shrink-0 flex flex-wrap items-center gap-2 px-6 py-2 border-b border-slate-800/50"
+        >
+          <span id="board-label-filter-label" className="text-xs text-slate-500">
+            Filter by label:
+          </span>
+          {labelsInPlay.map((label) => (
+            <LabelChip
+              key={label.id}
+              label={label}
+              active={effectiveFilterLabelId === label.id}
+              onClick={() =>
+                setFilterLabelId((current) =>
+                  current === label.id ? null : label.id
+                )
+              }
+            />
+          ))}
+          {effectiveFilterLabelId && (
+            <button
+              type="button"
+              aria-label="Clear label filter"
+              onClick={() => setFilterLabelId(null)}
+              className="text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 overflow-x-auto p-6">
         {loading ? (
