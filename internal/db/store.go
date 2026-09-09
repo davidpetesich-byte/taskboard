@@ -708,6 +708,20 @@ func (s *Store) ToggleSubtask(id string) (*models.Subtask, error) {
 	return &st, err
 }
 
+// GetSubtask returns a subtask by ID, or nil, nil when none exists.
+func (s *Store) GetSubtask(id string) (*models.Subtask, error) {
+	var st models.Subtask
+	err := s.db.QueryRow("SELECT id, ticket_id, title, completed, position FROM subtasks WHERE id = ?", id).
+		Scan(&st.ID, &st.TicketID, &st.Title, &st.Completed, &st.Position)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &st, nil
+}
+
 func (s *Store) DeleteSubtask(id string) error {
 	_, err := s.db.Exec("DELETE FROM subtasks WHERE id = ?", id)
 	return err

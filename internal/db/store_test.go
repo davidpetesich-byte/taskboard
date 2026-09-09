@@ -518,3 +518,25 @@ func TestResolveLabelIDsRejectsAmbiguousName(t *testing.T) {
 		t.Fatalf("resolve by ID with duplicate names = %v, %v", ids, err)
 	}
 }
+
+func TestGetSubtaskReturnsNilForUnknownID(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{ProjectID: project.ID, Title: "Parent"})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+	created, err := s.AddSubtask(ticket.ID, models.CreateSubtaskRequest{Title: "step"})
+	if err != nil {
+		t.Fatalf("adding subtask: %v", err)
+	}
+
+	got, err := s.GetSubtask(created.ID)
+	if err != nil || got == nil || got.ID != created.ID || got.Title != "step" {
+		t.Fatalf("GetSubtask(existing) = %+v, %v", got, err)
+	}
+	missing, err := s.GetSubtask("NOPE")
+	if err != nil || missing != nil {
+		t.Fatalf("GetSubtask(unknown) = %+v, %v; want nil, nil", missing, err)
+	}
+}

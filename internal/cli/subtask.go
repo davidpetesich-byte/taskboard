@@ -73,6 +73,13 @@ func subtaskCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			existing, err := store.GetSubtask(args[0])
+			if err != nil {
+				return err
+			}
+			if existing == nil {
+				return fmt.Errorf("subtask not found")
+			}
 			if err := store.DeleteSubtask(args[0]); err != nil {
 				return err
 			}
