@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, Trash2, CheckCircle2, Circle, Pencil, Eye } from "lucide-react";
 import Markdown from "react-markdown";
-import { api, type Ticket, type Project, type Team, type Subtask } from "../api/client";
+import { api, type Ticket, type TicketInput, type Project, type Team, type Subtask } from "../api/client";
 import { STATUSES, STATUS_LABELS } from "../constants/statuses";
 
 const PRIORITIES = ["urgent", "high", "medium", "low"];
@@ -18,7 +18,7 @@ export default function TicketPanel({
   projects: Project[];
   teams: Team[];
   onClose: () => void;
-  onUpdate: (id: string, data: Partial<Ticket>) => void;
+  onUpdate: (id: string, data: TicketInput) => void;
   onDelete: (id: string) => void;
 }) {
   const [title, setTitle] = useState(ticket.title);

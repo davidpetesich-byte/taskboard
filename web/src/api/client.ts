@@ -50,6 +50,21 @@ export interface Ticket {
   blockedBy: string[];
 }
 
+// POST/PUT request body for tickets. Unlike a hydrated Ticket response, this
+// contains only writable fields and sends label/dependency IDs rather than objects.
+export interface TicketInput {
+  projectId?: string;
+  teamId?: string;
+  title?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  dueDate?: string;
+  position?: number;
+  labels?: string[];
+  blockedBy?: string[];
+}
+
 export interface BoardColumn {
   status: string;
   tickets: Ticket[];
@@ -111,12 +126,12 @@ export const api = {
   tickets: {
     list: () => request<Ticket[]>("/api/tickets"),
     get: (id: string) => request<Ticket>(`/api/tickets/${id}`),
-    create: (data: Partial<Ticket>) =>
+    create: (data: TicketInput) =>
       request<Ticket>("/api/tickets", {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: Partial<Ticket>) =>
+    update: (id: string, data: TicketInput) =>
       request<Ticket>(`/api/tickets/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),

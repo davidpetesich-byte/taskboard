@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import type { Ticket, Project, Team } from "../api/client";
+import type { TicketInput, Project, Team } from "../api/client";
 
 const PRIORITIES = ["urgent", "high", "medium", "low"];
 
@@ -15,7 +15,7 @@ export default function CreateTicketModal({
   teams: Team[];
   defaultStatus?: string;
   onClose: () => void;
-  onCreate: (data: Partial<Ticket>) => void;
+  onCreate: (data: TicketInput) => void;
 }) {
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [title, setTitle] = useState("");
