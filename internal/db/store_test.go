@@ -285,6 +285,92 @@ func TestUpdateTicketWithUnknownLabelKeepsExistingLabels(t *testing.T) {
 	}
 }
 
+func TestUpdateTicketWithLabelDeltaPreservesLabelAddedDuringUpdate(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	labelA := newTestLabel(t, s, "A")
+	labelB := newTestLabel(t, s, "B")
+	labelC := newTestLabel(t, s, "C")
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{
+		ProjectID: project.ID,
+		Title:     "Original",
+		Labels:    []string{labelA.ID},
+	})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+
+	// Model a label write interleaved after the field update begins. A stale
+	// read-modify-replace implementation would delete B when applying its
+	// snapshot; an atomic SQL delta preserves it.
+	_, err = s.db.Exec(`CREATE TRIGGER attach_label_during_ticket_update
+		AFTER UPDATE ON tickets
+		BEGIN
+			INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id)
+			VALUES (NEW.id, '` + labelB.ID + `');
+		END`)
+	if err != nil {
+		t.Fatalf("creating interleaved label trigger: %v", err)
+	}
+
+	newTitle := "Renamed"
+	updated, err := s.UpdateTicketWithLabelDelta(
+		ticket.ID,
+		models.UpdateTicketRequest{Title: &newTitle},
+		[]string{labelC.ID},
+		[]string{labelA.ID},
+	)
+	if err != nil {
+		t.Fatalf("updating ticket with label delta: %v", err)
+	}
+	if updated.Title != newTitle {
+		t.Fatalf("title = %q, want %q", updated.Title, newTitle)
+	}
+	got := labelIDs(updated.Labels)
+	sort.Strings(got)
+	want := []string{labelB.ID, labelC.ID}
+	sort.Strings(want)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("labels = %v, want interleaved B plus delta C: %v", got, want)
+	}
+}
+
+func TestUpdateTicketWithLabelDeltaRollsBackFieldsOnInvalidLabel(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	label := newTestLabel(t, s, "Existing")
+	ticket, err := s.CreateTicket(models.CreateTicketRequest{
+		ProjectID: project.ID,
+		Title:     "Original",
+		Labels:    []string{label.ID},
+	})
+	if err != nil {
+		t.Fatalf("creating ticket: %v", err)
+	}
+
+	newTitle := "Must roll back"
+	_, err = s.UpdateTicketWithLabelDelta(
+		ticket.ID,
+		models.UpdateTicketRequest{Title: &newTitle},
+		[]string{"DOES-NOT-EXIST"},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("delta update with an unknown label returned nil error")
+	}
+
+	got, err := s.GetTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("getting ticket after failed delta: %v", err)
+	}
+	if got.Title != "Original" {
+		t.Fatalf("failed label delta changed title to %q", got.Title)
+	}
+	if ids := labelIDs(got.Labels); !reflect.DeepEqual(ids, []string{label.ID}) {
+		t.Fatalf("failed label delta changed labels to %v", ids)
+	}
+}
+
 func TestOpenAtSetsBusyTimeout(t *testing.T) {
 	s := newTestStore(t)
 	var ms int

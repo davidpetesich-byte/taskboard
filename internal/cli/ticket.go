@@ -20,6 +20,16 @@ func ticketCommands() *cobra.Command {
 		Use:   "list",
 		Short: "List tickets",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if status != "" {
+				if err := validateStatus(status); err != nil {
+					return err
+				}
+			}
+			if priority != "" {
+				if err := validatePriority(priority); err != nil {
+					return err
+				}
+			}
 			store, err := openStore()
 			if err != nil {
 				return err
@@ -75,16 +85,17 @@ func ticketCommands() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new ticket",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			store, err := openStore()
-			if err != nil {
-				return err
-			}
 			title, _ := cmd.Flags().GetString("title")
 			if err := validatePriority(createPriority); err != nil {
 				return err
 			}
 			if createStatus != "" {
 				if err := validateStatus(createStatus); err != nil {
+					return err
+				}
+			}
+			if createDue != "" {
+				if err := validateDue(createDue); err != nil {
 					return err
 				}
 			}
@@ -102,13 +113,14 @@ func ticketCommands() *cobra.Command {
 				req.Description = *desc
 			}
 			if createDue != "" {
-				if err := validateDue(createDue); err != nil {
-					return err
-				}
 				req.DueDate = &createDue
 			}
 			if createTeam != "" {
 				req.TeamID = &createTeam
+			}
+			store, err := openStore()
+			if err != nil {
+				return err
 			}
 			if len(createLabels) > 0 {
 				req.Labels, err = store.ResolveLabelIDs(createLabels)
@@ -215,6 +227,25 @@ func ticketCommands() *cobra.Command {
 			if !changed {
 				return fmt.Errorf("nothing to update: pass at least one flag (see --help)")
 			}
+			if cmd.Flags().Changed("status") {
+				if err := validateStatus(upStatus); err != nil {
+					return err
+				}
+			}
+			if cmd.Flags().Changed("priority") {
+				if err := validatePriority(upPriority); err != nil {
+					return err
+				}
+			}
+			if cmd.Flags().Changed("due") {
+				if err := validateDue(upDue); err != nil {
+					return err
+				}
+			}
+			desc, err := descriptionFromFlags(cmd, upDesc, upDescFile)
+			if err != nil {
+				return err
+			}
 			store, err := openStore()
 			if err != nil {
 				return err
@@ -229,31 +260,21 @@ func ticketCommands() *cobra.Command {
 				req.Title = &upTitle
 			}
 			if cmd.Flags().Changed("status") {
-				if err := validateStatus(upStatus); err != nil {
-					return err
-				}
 				req.Status = &upStatus
 			}
 			if cmd.Flags().Changed("priority") {
-				if err := validatePriority(upPriority); err != nil {
-					return err
-				}
 				req.Priority = &upPriority
 			}
 			if cmd.Flags().Changed("due") {
-				if err := validateDue(upDue); err != nil {
-					return err
-				}
 				req.DueDate = &upDue
 			}
 			if cmd.Flags().Changed("team") {
 				req.TeamID = &upTeam
 			}
-			req.Description, err = descriptionFromFlags(cmd, upDesc, upDescFile)
-			if err != nil {
-				return err
-			}
+			req.Description = desc
 
+			var addLabelIDs, removeLabelIDs []string
+			useLabelDelta := false
 			switch {
 			case upClearLabels:
 				req.Labels = []string{}
@@ -263,45 +284,27 @@ func ticketCommands() *cobra.Command {
 					return err
 				}
 			case len(upAddLabels) > 0 || len(upRemoveLabels) > 0:
-				current, err := store.GetTicket(id)
-				if err != nil {
-					return err
-				}
-				if current == nil {
-					return db.ErrTicketNotFound
-				}
-				set := map[string]bool{}
-				order := []string{}
-				for _, l := range current.Labels {
-					set[l.ID] = true
-					order = append(order, l.ID)
-				}
-				add, err := store.ResolveLabelIDs(upAddLabels)
-				if err != nil {
-					return err
-				}
-				for _, lid := range add {
-					if !set[lid] {
-						set[lid] = true
-						order = append(order, lid)
+				useLabelDelta = true
+				if len(upAddLabels) > 0 {
+					addLabelIDs, err = store.ResolveLabelIDs(upAddLabels)
+					if err != nil {
+						return err
 					}
 				}
-				remove, err := store.ResolveLabelIDs(upRemoveLabels)
-				if err != nil {
-					return err
-				}
-				for _, lid := range remove {
-					delete(set, lid)
-				}
-				req.Labels = []string{}
-				for _, lid := range order {
-					if set[lid] {
-						req.Labels = append(req.Labels, lid)
+				if len(upRemoveLabels) > 0 {
+					removeLabelIDs, err = store.ResolveLabelIDs(upRemoveLabels)
+					if err != nil {
+						return err
 					}
 				}
 			}
 
-			t, err := store.UpdateTicket(id, req)
+			var t *models.Ticket
+			if useLabelDelta {
+				t, err = store.UpdateTicketWithLabelDelta(id, req, addLabelIDs, removeLabelIDs)
+			} else {
+				t, err = store.UpdateTicket(id, req)
+			}
 			if err != nil {
 				return err
 			}
@@ -337,11 +340,11 @@ func ticketCommands() *cobra.Command {
 		Short: "Move ticket to a different status (ref is an ID or display key like WEB-12)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			store, err := openStore()
-			if err != nil {
+			if err := validateStatus(moveStatus); err != nil {
 				return err
 			}
-			if err := validateStatus(moveStatus); err != nil {
+			store, err := openStore()
+			if err != nil {
 				return err
 			}
 			id, err := store.ResolveTicketID(args[0])

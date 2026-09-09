@@ -444,6 +444,36 @@ func TestTicketListFiltersByTeam(t *testing.T) {
 	}
 }
 
+func TestInvalidTicketFlagsDoNotCreateDatabase(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "list status", args: []string{"ticket", "list", "--status", "wat"}, want: "invalid status"},
+		{name: "list priority", args: []string{"ticket", "list", "--priority", "wat"}, want: "invalid priority"},
+		{name: "create status", args: []string{"ticket", "create", "--project", "missing", "--title", "x", "--status", "wat"}, want: "invalid status"},
+		{name: "create priority", args: []string{"ticket", "create", "--project", "missing", "--title", "x", "--priority", "wat"}, want: "invalid priority"},
+		{name: "create due", args: []string{"ticket", "create", "--project", "missing", "--title", "x", "--due", "tomorrow"}, want: "invalid due date"},
+		{name: "update status", args: []string{"ticket", "update", "missing", "--status", "wat"}, want: "invalid status"},
+		{name: "update priority", args: []string{"ticket", "update", "missing", "--priority", "wat"}, want: "invalid priority"},
+		{name: "update due", args: []string{"ticket", "update", "missing", "--due", "tomorrow"}, want: "invalid due date"},
+		{name: "move status", args: []string{"ticket", "move", "missing", "--status", "wat"}, want: "invalid status"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newCLIEnv(t)
+			out, err := env.run(tc.args...)
+			if err == nil || !strings.Contains(out, tc.want) {
+				t.Fatalf("invalid flags: err=%v out=%q, want %q", err, out, tc.want)
+			}
+			if _, err := os.Stat(env.dbPath); !os.IsNotExist(err) {
+				t.Fatalf("invalid command created database %q: stat error = %v", env.dbPath, err)
+			}
+		})
+	}
+}
+
 // labelNames returns a ticket's label names sorted, for stable comparison.
 func labelNames(t models.Ticket) []string {
 	names := make([]string, 0, len(t.Labels))

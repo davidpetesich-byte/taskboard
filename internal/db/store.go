@@ -428,6 +428,21 @@ func (s *Store) CreateTicket(req models.CreateTicketRequest) (*models.Ticket, er
 }
 
 func (s *Store) UpdateTicket(id string, req models.UpdateTicketRequest) (*models.Ticket, error) {
+	return s.updateTicket(id, req, nil, nil)
+}
+
+// UpdateTicketWithLabelDelta updates ticket fields and applies label additions
+// and removals in the same transaction. Unlike a read-modify-replace in the
+// caller, the SQL delta preserves labels attached by another writer between
+// the caller's read and this update.
+func (s *Store) UpdateTicketWithLabelDelta(id string, req models.UpdateTicketRequest, addLabelIDs, removeLabelIDs []string) (*models.Ticket, error) {
+	if req.Labels != nil {
+		return nil, errors.New("label replacement and label delta cannot be combined")
+	}
+	return s.updateTicket(id, req, addLabelIDs, removeLabelIDs)
+}
+
+func (s *Store) updateTicket(id string, req models.UpdateTicketRequest, addLabelIDs, removeLabelIDs []string) (*models.Ticket, error) {
 	t, err := s.GetTicket(id)
 	if err != nil || t == nil {
 		return nil, err
@@ -482,6 +497,17 @@ func (s *Store) UpdateTicket(id string, req models.UpdateTicketRequest) (*models
 		for _, labelID := range req.Labels {
 			if _, err := tx.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", id, labelID); err != nil {
 				return nil, fmt.Errorf("attaching label %s: %w", labelID, err)
+			}
+		}
+	} else {
+		for _, labelID := range addLabelIDs {
+			if _, err := tx.Exec("INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", id, labelID); err != nil {
+				return nil, fmt.Errorf("attaching label %s: %w", labelID, err)
+			}
+		}
+		for _, labelID := range removeLabelIDs {
+			if _, err := tx.Exec("DELETE FROM ticket_labels WHERE ticket_id = ? AND label_id = ?", id, labelID); err != nil {
+				return nil, fmt.Errorf("detaching label %s: %w", labelID, err)
 			}
 		}
 	}
