@@ -285,6 +285,34 @@ func (s *MCPServer) callTool(name string, args json.RawMessage) (any, error) {
 		json.Unmarshal(args, &a)
 		return map[string]bool{"deleted": true}, s.store.DeleteTicket(a.ID)
 
+	case "list_labels":
+		labels, err := s.store.ListLabels()
+		if labels == nil {
+			labels = []models.Label{}
+		}
+		return labels, err
+
+	case "create_label":
+		var a models.CreateLabelRequest
+		json.Unmarshal(args, &a)
+		if a.Name == "" {
+			return nil, fmt.Errorf("name is required")
+		}
+		if a.Color == "" {
+			a.Color = "#6B7280" // matches the labels.color column default, which an explicit '' would bypass
+		}
+		return s.store.CreateLabel(a)
+
+	case "delete_label":
+		var a struct {
+			ID string `json:"id"`
+		}
+		json.Unmarshal(args, &a)
+		if a.ID == "" {
+			return nil, fmt.Errorf("id is required")
+		}
+		return map[string]bool{"deleted": true}, s.store.DeleteLabel(a.ID)
+
 	case "get_board":
 		var a struct {
 			ProjectID string `json:"projectId"`
@@ -467,7 +495,7 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 				Properties: map[string]schemaProp{
 					"projectId": {Type: "string", Description: "Filter by project ID"},
 					"teamId":    {Type: "string", Description: "Filter by team ID"},
-					"status":    {Type: "string", Description: "Filter by status", Enum: []string{"todo", "in_progress", "done"}},
+					"status":    {Type: "string", Description: "Filter by status", Enum: db.BoardStatuses},
 					"priority":  {Type: "string", Description: "Filter by priority", Enum: []string{"urgent", "high", "medium", "low"}},
 				},
 			},
@@ -493,10 +521,11 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 					"projectId":   {Type: "string", Description: "Project ID"},
 					"title":       {Type: "string", Description: "Ticket title"},
 					"description": {Type: "string", Description: "Rich text description"},
-					"status":      {Type: "string", Description: "Initial status", Enum: []string{"todo", "in_progress", "done"}},
+					"status":      {Type: "string", Description: "Initial status", Enum: db.BoardStatuses},
 					"priority":    {Type: "string", Description: "Priority level", Enum: []string{"urgent", "high", "medium", "low"}},
 					"teamId":      {Type: "string", Description: "Team ID"},
 					"dueDate":     {Type: "string", Description: "Due date (YYYY-MM-DD)"},
+					"labels":      {Type: "array", Description: "Label IDs to attach (see list_labels)", Items: &jsonSchema{Type: "string"}},
 				},
 				Required: []string{"projectId", "title"},
 			},
@@ -510,10 +539,11 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 					"id":          {Type: "string", Description: "Ticket ID"},
 					"title":       {Type: "string", Description: "Ticket title"},
 					"description": {Type: "string", Description: "Description"},
-					"status":      {Type: "string", Description: "Status", Enum: []string{"todo", "in_progress", "done"}},
+					"status":      {Type: "string", Description: "Status", Enum: db.BoardStatuses},
 					"priority":    {Type: "string", Description: "Priority", Enum: []string{"urgent", "high", "medium", "low"}},
 					"teamId":      {Type: "string", Description: "Team ID"},
 					"dueDate":     {Type: "string", Description: "Due date (YYYY-MM-DD)"},
+					"labels":      {Type: "array", Description: "Label IDs - replaces the ticket's full label set; pass [] to clear", Items: &jsonSchema{Type: "string"}},
 				},
 				Required: []string{"id"},
 			},
@@ -525,7 +555,7 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 				Type: "object",
 				Properties: map[string]schemaProp{
 					"id":     {Type: "string", Description: "Ticket ID"},
-					"status": {Type: "string", Description: "Target status", Enum: []string{"todo", "in_progress", "done"}},
+					"status": {Type: "string", Description: "Target status", Enum: db.BoardStatuses},
 				},
 				Required: []string{"id", "status"},
 			},
@@ -539,10 +569,38 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 				Required:   []string{"id"},
 			},
 		},
+		// --- Labels (cross-cutting tags on tickets) ---
+		{
+			Name: "list_labels",
+			Description: "List all labels. Labels are colour-coded tags (e.g. Blocked) attached to tickets " +
+				"via the labels parameter of create_ticket and update_ticket.",
+			InputSchema: jsonSchema{Type: "object"},
+		},
+		{
+			Name:        "create_label",
+			Description: "Create a new label",
+			InputSchema: jsonSchema{
+				Type: "object",
+				Properties: map[string]schemaProp{
+					"name":  {Type: "string", Description: "Label name"},
+					"color": {Type: "string", Description: "Hex color, e.g. #EF4444 (defaults to #6B7280)"},
+				},
+				Required: []string{"name"},
+			},
+		},
+		{
+			Name:        "delete_label",
+			Description: "Delete a label and detach it from every ticket",
+			InputSchema: jsonSchema{
+				Type:       "object",
+				Properties: map[string]schemaProp{"id": {Type: "string", Description: "Label ID"}},
+				Required:   []string{"id"},
+			},
+		},
 		// --- Board ---
 		{
 			Name:        "get_board",
-			Description: "Get full Kanban board grouped by status columns (todo, in_progress, done)",
+			Description: "Get full Kanban board grouped by status columns (backlog, todo, in_progress, in_review, done)",
 			InputSchema: jsonSchema{
 				Type: "object",
 				Properties: map[string]schemaProp{
