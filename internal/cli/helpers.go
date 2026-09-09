@@ -12,8 +12,8 @@ import (
 	"github.com/tcarac/taskboard/internal/db"
 )
 
-// jsonOut is bound to the root --json flag. When set, every command prints
-// exactly one JSON document (the API struct) and nothing else on stdout.
+// jsonOut is bound to the root --json flag. Data-management commands use it
+// to print exactly one JSON document and nothing else on stdout.
 var jsonOut bool
 
 var priorities = []string{"urgent", "high", "medium", "low"}

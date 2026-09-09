@@ -67,11 +67,15 @@ taskboard start --port 8080
 
 ### CLI (for scripts and agents)
 
-Every command accepts `--json` and then prints the same structure the REST API returns
-(an object, or an array for `list` commands; `[]` when empty). Errors go to stderr with a
-non-zero exit code. Tickets may be referenced by ID or by display key (`WEB-12`); labels by
-ID or by an unambiguous, case-insensitive name. If more than one label has the same name,
-the command errors and requires a label ID. Due dates must use `YYYY-MM-DD`.
+The data-management commands shown below accept `--json`. Commands that return data emit
+API model objects; `list` commands emit arrays (`[]` when empty). Delete commands emit the
+CLI confirmation object `{"deleted":true,"id":"..."}`. Errors go to stderr with a non-zero
+exit code. Lifecycle and protocol commands (`start`, `stop`, `mcp`, and `clear`) are outside
+this JSON contract.
+
+Tickets may be referenced by ID or by display key (`WEB-12`); labels by ID or by an
+unambiguous, case-insensitive name. If more than one label has the same name, the command
+errors and requires a label ID. Due dates must use `YYYY-MM-DD`.
 Optional fields that are empty (`description`, `labels`, `subtasks`, `blockedBy`, `dueDate`,
 `teamId`) are omitted from the JSON rather than emitted as empty values, so treat a missing
 key as empty.
@@ -89,6 +93,10 @@ key as empty.
 | `taskboard subtask add TICKET-REF TITLE` / `subtask toggle ID` / `subtask delete ID` | Manage subtasks |
 | `taskboard project list` / `project create NAME --prefix P` / `project delete ID` | Manage projects |
 | `taskboard team list` / `team create NAME` / `team delete ID` | Manage teams |
+
+For `ticket update`, one or more repeated `--label REF` flags collectively replace the
+entire label set. Repeated `--add-label REF` and `--remove-label REF` flags apply deltas to
+the current set; `--clear-labels` empties it. Replace, delta, and clear modes cannot be mixed.
 
 Statuses: `backlog`, `todo`, `in_progress`, `in_review`, `done`. Priorities: `urgent`,
 `high`, `medium`, `low`. Example:
