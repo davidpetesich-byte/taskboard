@@ -27,6 +27,7 @@ import {
 import { api, type Ticket, type TicketInput, type Project, type Team, type BoardColumn } from "../api/client";
 import TicketPanel from "../components/TicketPanel";
 import CreateTicketModal from "../components/CreateTicketModal";
+import LabelChip from "../components/LabelChip";
 import { STATUSES, STATUS_LABELS, STATUS_COLORS } from "../constants/statuses";
 
 const PRIORITY_CONFIG: Record<string, { color: string; icon: typeof ArrowUp }> = {
@@ -98,6 +99,13 @@ function TicketCard({
         <PriorityBadge priority={ticket.priority} />
       </div>
       <p className="text-sm text-slate-200 leading-snug">{ticket.title}</p>
+      {ticket.labels && ticket.labels.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {ticket.labels.map((l) => (
+            <LabelChip key={l.id} label={l} />
+          ))}
+        </div>
+      )}
       {(project || team) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {project && (
