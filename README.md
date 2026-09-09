@@ -72,6 +72,9 @@ Every command accepts `--json` and then prints the same structure the REST API r
 non-zero exit code. Tickets may be referenced by ID or by display key (`WEB-12`); labels by
 ID or by an unambiguous, case-insensitive name. If more than one label has the same name,
 the command errors and requires a label ID. Due dates must use `YYYY-MM-DD`.
+Optional fields that are empty (`description`, `labels`, `subtasks`, `blockedBy`, `dueDate`,
+`teamId`) are omitted from the JSON rather than emitted as empty values, so treat a missing
+key as empty.
 
 | Command | Purpose |
 |---|---|
