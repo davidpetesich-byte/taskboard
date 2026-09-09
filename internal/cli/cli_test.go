@@ -474,6 +474,43 @@ func TestInvalidTicketFlagsDoNotCreateDatabase(t *testing.T) {
 	}
 }
 
+func TestSubtaskLifecycleViaCLI(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	env.runJSON(new(models.Ticket), "ticket", "create", "--project", p.ID, "--title", "Parent")
+
+	var st models.Subtask
+	env.runJSON(&st, "subtask", "add", "SMK-1", "Write tests")
+	if st.ID == "" || st.Title != "Write tests" || st.Completed {
+		t.Fatalf("subtask add --json = %+v", st)
+	}
+
+	env.runJSON(&st, "subtask", "toggle", st.ID)
+	if !st.Completed {
+		t.Fatalf("after toggle, completed = false")
+	}
+
+	var tk models.Ticket
+	env.runJSON(&tk, "ticket", "get", "SMK-1")
+	if len(tk.Subtasks) != 1 || !tk.Subtasks[0].Completed {
+		t.Fatalf("ticket get subtasks = %+v", tk.Subtasks)
+	}
+
+	var del map[string]any
+	env.runJSON(&del, "subtask", "delete", st.ID)
+	if del["deleted"] != true || del["id"] != st.ID {
+		t.Fatalf("subtask delete returned %v", del)
+	}
+	env.runJSON(&tk, "ticket", "get", "SMK-1")
+	if len(tk.Subtasks) != 0 {
+		t.Fatalf("subtask still present after delete: %+v", tk.Subtasks)
+	}
+
+	if _, err := env.run("subtask", "toggle", "NOPE"); err == nil {
+		t.Fatal("toggling unknown subtask returned nil error")
+	}
+}
+
 // labelNames returns a ticket's label names sorted, for stable comparison.
 func labelNames(t models.Ticket) []string {
 	names := make([]string, 0, len(t.Labels))
