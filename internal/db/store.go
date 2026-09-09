@@ -48,6 +48,9 @@ func newID() string {
 	return ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reader).String()
 }
 
+// BoardStatuses defines the ordered board columns, preserves upstream status keys while adding backlog and in_review, and is mirrored by MCP and the frontend.
+var BoardStatuses = []string{"backlog", "todo", "in_progress", "in_review", "done"}
+
 func (s *Store) ListProjects(status string) ([]models.Project, error) {
 	query := "SELECT id, name, prefix, description, icon, color, status, created_at, updated_at FROM projects"
 	args := []any{}
@@ -438,7 +441,7 @@ func (s *Store) DeleteTicket(id string) error {
 }
 
 func (s *Store) GetBoard(projectID string) (*models.Board, error) {
-	statuses := []string{"todo", "in_progress", "done"}
+	statuses := BoardStatuses
 	board := &models.Board{
 		ProjectID: projectID,
 		Columns:   make([]models.Column, len(statuses)),
