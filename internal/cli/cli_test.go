@@ -511,6 +511,36 @@ func TestSubtaskLifecycleViaCLI(t *testing.T) {
 	}
 }
 
+func TestBoardCommand(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	env.runJSON(new(models.Ticket), "ticket", "create", "--project", p.ID, "--title", "Reviewing", "--status", "in_review")
+
+	var board models.Board
+	env.runJSON(&board, "board", "--project", p.ID)
+	got := make([]string, 0, len(board.Columns))
+	for _, c := range board.Columns {
+		got = append(got, c.Status)
+	}
+	want := []string{"backlog", "todo", "in_progress", "in_review", "done"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("board columns = %v, want %v", got, want)
+	}
+	if len(board.Columns[3].Tickets) != 1 || board.Columns[3].Tickets[0].Title != "Reviewing" {
+		t.Fatalf("in_review column = %+v", board.Columns[3].Tickets)
+	}
+
+	out, err := env.run("board")
+	if err != nil {
+		t.Fatalf("board: %v", err)
+	}
+	for _, want := range []string{"Backlog (0)", "In Review (1)", "SMK-1", "Reviewing"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("human board missing %q:\n%s", want, out)
+		}
+	}
+}
+
 // labelNames returns a ticket's label names sorted, for stable comparison.
 func labelNames(t models.Ticket) []string {
 	names := make([]string, 0, len(t.Labels))
