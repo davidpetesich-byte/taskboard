@@ -1,5 +1,10 @@
 # Taskboard
 
+> **Fork note (branch `dp/jira-columns-labels`):** this is a local fork of
+> [tcarac/taskboard](https://github.com/tcarac/taskboard) adding two board columns
+> (Backlog, In Review) and a working label UI. Design and rationale live in
+> `docs/superpowers/specs/2026-09-09-columns-and-labels-design.md`.
+
 A local, self-hosted project management tool with a Kanban UI, full CLI, and a built-in [MCP](https://modelcontextprotocol.io/) server that lets AI assistants manage your projects, tickets, and teams directly.
 
 Single binary. SQLite-backed. No Docker, no external database, no runtime dependencies.
@@ -12,34 +17,42 @@ Single binary. SQLite-backed. No Docker, no external database, no runtime depend
 
 ## Features
 
-- **Kanban Board** — drag-and-drop ticket management across Todo, In Progress, and Done columns
+- **Kanban Board** — drag-and-drop ticket management across Backlog, To Do, In Progress, In Review, and Done columns
+- **Labels** — colour-coded tags on tickets, settable from the ticket panel, with a board filter
 - **Projects** — organize work with customizable projects (icons, colors, prefixes)
 - **Teams** — assign tickets to teams
 - **Tickets** — priority levels, due dates, labels, subtasks, dependencies (blocked by)
 - **Embedded Terminal** — run AI coding agents (opencode, Claude Code) directly from the web UI
 - **CLI** — manage everything from the terminal
-- **MCP Server** — 22 tools for AI-native project management via Model Context Protocol
+- **MCP Server** — 24 tools for AI-native project management via Model Context Protocol
 - **Self-Hosted** — your data stays on your machine in a SQLite database
-- **Single Binary** — one `brew install` and you're running
+- **Single Binary** — install this local fork with `make install`
 
 ## Install
 
-### Homebrew
+### This local fork
 
-```bash
-brew tap tcarac/taskboard
-brew install taskboard
-```
-
-### From source
-
-```bash
-git clone https://github.com/tcarac/taskboard.git
-cd taskboard
-make build
-```
+This checkout is a local-only fork; upstream Homebrew v0.6.0 does not include
+these five-column and label changes and must not coexist with this fork. If the
+upstream binary is installed, remove it first to avoid binary shadowing and
+shared database or PID-lock conflicts:
 
 Requires Go 1.24+ and Node.js 22+.
+
+```bash
+if brew list --formula taskboard >/dev/null 2>&1; then
+  brew uninstall taskboard
+fi
+if brew list --formula taskboard >/dev/null 2>&1; then
+  echo "Homebrew taskboard is still installed; stop before installing the fork." >&2
+  exit 1
+fi
+make install
+export PATH="$HOME/.local/bin:$PATH"
+hash -r
+which taskboard
+# expected: $HOME/.local/bin/taskboard (for example, /Users/your-user/.local/bin/taskboard)
+```
 
 ## Usage
 
@@ -104,7 +117,7 @@ Project → Ticket → Subtask
 - **Tickets** are concrete, actionable tasks within a project. Don't create "epic" tickets — use projects.
 - **Subtasks** are checklist steps within a ticket, for breaking work into verifiable pieces.
 
-#### Available MCP Tools (22)
+#### Available MCP Tools (24)
 
 | Tool                    | Description                                      |
 | ----------------------- | ------------------------------------------------ |
@@ -127,6 +140,10 @@ Project → Ticket → Subtask
 | `update_ticket`         | Update ticket properties                         |
 | `move_ticket`           | Move ticket to different status column           |
 | `delete_ticket`         | Delete a ticket                                  |
+| **Labels**              |                                                  |
+| `list_labels`           | List all labels                                  |
+| `create_label`          | Create a label (name, hex color)                 |
+| `delete_label`          | Delete a label and detach it from all tickets    |
 | **Board**               |                                                  |
 | `get_board`             | Get full Kanban board grouped by status          |
 | **Subtasks**            |                                                  |
