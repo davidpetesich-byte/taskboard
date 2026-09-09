@@ -25,18 +25,22 @@ func projectCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(projects) == 0 {
-				fmt.Println("No projects found.")
-				return nil
+			if projects == nil {
+				projects = []models.Project{}
 			}
-			for _, p := range projects {
-				icon := p.Icon
-				if icon == "" {
-					icon = " "
+			return emit(cmd, projects, func() {
+				if len(projects) == 0 {
+					fmt.Fprintln(cmd.OutOrStdout(), "No projects found.")
+					return
 				}
-				fmt.Printf("%s %s [%s] (%s) - %s\n", icon, p.Name, p.Prefix, p.Status, p.ID)
-			}
-			return nil
+				for _, p := range projects {
+					icon := p.Icon
+					if icon == "" {
+						icon = " "
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "%s %s [%s] (%s) - %s\n", icon, p.Name, p.Prefix, p.Status, p.ID)
+				}
+			})
 		},
 	}
 
@@ -59,8 +63,9 @@ func projectCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Created project %s [%s] (%s)\n", p.Name, p.Prefix, p.ID)
-			return nil
+			return emit(cmd, p, func() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Created project %s [%s] (%s)\n", p.Name, p.Prefix, p.ID)
+			})
 		},
 	}
 	createCmd.Flags().StringVar(&prefix, "prefix", "", "project prefix (required)")
@@ -80,8 +85,9 @@ func projectCommands() *cobra.Command {
 			if err := store.DeleteProject(args[0]); err != nil {
 				return err
 			}
-			fmt.Println("Project deleted.")
-			return nil
+			return emit(cmd, deleted(args[0]), func() {
+				fmt.Fprintln(cmd.OutOrStdout(), "Project deleted.")
+			})
 		},
 	}
 

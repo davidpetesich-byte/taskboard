@@ -25,14 +25,18 @@ func teamCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(teams) == 0 {
-				fmt.Println("No teams found.")
-				return nil
+			if teams == nil {
+				teams = []models.Team{}
 			}
-			for _, t := range teams {
-				fmt.Printf("%s (%s)\n", t.Name, t.ID)
-			}
-			return nil
+			return emit(cmd, teams, func() {
+				if len(teams) == 0 {
+					fmt.Fprintln(cmd.OutOrStdout(), "No teams found.")
+					return
+				}
+				for _, t := range teams {
+					fmt.Fprintf(cmd.OutOrStdout(), "%s (%s)\n", t.Name, t.ID)
+				}
+			})
 		},
 	}
 
@@ -53,8 +57,9 @@ func teamCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Created team %s (%s)\n", t.Name, t.ID)
-			return nil
+			return emit(cmd, t, func() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Created team %s (%s)\n", t.Name, t.ID)
+			})
 		},
 	}
 	createCmd.Flags().StringVar(&color, "color", "#6366F1", "hex color")
@@ -71,8 +76,9 @@ func teamCommands() *cobra.Command {
 			if err := store.DeleteTeam(args[0]); err != nil {
 				return err
 			}
-			fmt.Println("Team deleted.")
-			return nil
+			return emit(cmd, deleted(args[0]), func() {
+				fmt.Fprintln(cmd.OutOrStdout(), "Team deleted.")
+			})
 		},
 	}
 

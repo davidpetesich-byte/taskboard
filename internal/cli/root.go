@@ -27,8 +27,14 @@ func NewRootCmd(webFS fs.FS) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "taskboard",
 		Short: "Local project management with Kanban UI and MCP server",
+		Long: "Local project management with Kanban UI and MCP server.\n\n" +
+			"Every command accepts --json to print the API struct instead of text, which is the\n" +
+			"recommended mode for scripts and AI agents. Tickets may be referenced by ID or by\n" +
+			"display key (e.g. WEB-12); labels by ID or name.",
+		SilenceUsage: true,
 	}
 	root.PersistentFlags().StringVar(&dbPath, "db", "", "path to SQLite database file (default: OS config dir)")
+	root.PersistentFlags().BoolVar(&jsonOut, "json", false, "print output as JSON (the same structures the REST API returns)")
 
 	startCmd := &cobra.Command{
 		Use:   "start",

@@ -30,15 +30,18 @@ func ticketCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(tickets) == 0 {
-				fmt.Println("No tickets found.")
-				return nil
+			if tickets == nil {
+				tickets = []models.Ticket{}
 			}
-			for _, t := range tickets {
-				key := t.DisplayKey()
-				fmt.Printf("[%s] %s - %s (%s, %s)\n", key, t.Title, t.Status, t.Priority, t.ID)
-			}
-			return nil
+			return emit(cmd, tickets, func() {
+				if len(tickets) == 0 {
+					fmt.Fprintln(cmd.OutOrStdout(), "No tickets found.")
+					return
+				}
+				for _, t := range tickets {
+					fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s - %s (%s, %s)\n", t.DisplayKey(), t.Title, t.Status, t.Priority, t.ID)
+				}
+			})
 		},
 	}
 	listCmd.Flags().StringVar(&projectID, "project", "", "filter by project ID")
@@ -70,8 +73,9 @@ func ticketCommands() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Created ticket %s: %s (%s)\n", t.DisplayKey(), t.Title, t.ID)
-			return nil
+			return emit(cmd, t, func() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Created ticket %s: %s (%s)\n", t.DisplayKey(), t.Title, t.ID)
+			})
 		},
 	}
 	createCmd.Flags().StringVar(&createProject, "project", "", "project ID (required)")
@@ -99,8 +103,9 @@ func ticketCommands() *cobra.Command {
 			if t == nil {
 				return fmt.Errorf("ticket not found")
 			}
-			fmt.Printf("Moved %s to %s\n", t.DisplayKey(), t.Status)
-			return nil
+			return emit(cmd, t, func() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Moved %s to %s\n", t.DisplayKey(), t.Status)
+			})
 		},
 	}
 	moveCmd.Flags().StringVar(&moveStatus, "status", "", "target status (required)")
@@ -118,8 +123,9 @@ func ticketCommands() *cobra.Command {
 			if err := store.DeleteTicket(args[0]); err != nil {
 				return err
 			}
-			fmt.Println("Ticket deleted.")
-			return nil
+			return emit(cmd, deleted(args[0]), func() {
+				fmt.Fprintln(cmd.OutOrStdout(), "Ticket deleted.")
+			})
 		},
 	}
 
