@@ -81,11 +81,11 @@ key as empty.
 | `taskboard board [--project ID]` | All five columns with their tickets |
 | `taskboard ticket list [--project ID] [--team ID] [--status S] [--priority P] [--label REF]` | List tickets |
 | `taskboard ticket get REF` | Full ticket: description, labels, subtasks, blockers |
-| `taskboard ticket create --project ID --title T [--status S] [--priority P] [--due YYYY-MM-DD] [--team ID] [--description MD \| --description-file PATH\|-] [--label REF ...]` | Create a ticket |
-| `taskboard ticket update REF [--title T] [--status S] [--priority P] [--due YYYY-MM-DD] [--team ID] [--description MD \| --description-file PATH\|-] [--label REF ... \| --add-label REF ... --remove-label REF ... \| --clear-labels]` | Update only the fields given |
+| `taskboard ticket create --project ID --title T [--status S] [--priority P] [--due YYYY-MM-DD] [--team ID] [--description MD \| --description-file PATH\|-] [--label REF]...` | Create a ticket |
+| `taskboard ticket update REF [--title T] [--status S] [--priority P] [--due YYYY-MM-DD] [--team ID] [--description MD \| --description-file PATH\|-] [[--label REF]... \| [--add-label REF]... [--remove-label REF]... \| --clear-labels]` | Update only the fields given |
 | `taskboard ticket move REF --status S` | Change status |
 | `taskboard ticket delete REF` | Delete a ticket |
-| `taskboard label list` / `label create NAME [--color #HEX]` / `label delete REF` | Manage labels |
+| `taskboard label list` / `label create NAME [--color '#RRGGBB']` / `label delete REF` | Manage labels |
 | `taskboard subtask add TICKET-REF TITLE` / `subtask toggle ID` / `subtask delete ID` | Manage subtasks |
 | `taskboard project list` / `project create NAME --prefix P` / `project delete ID` | Manage projects |
 | `taskboard team list` / `team create NAME` / `team delete ID` | Manage teams |
