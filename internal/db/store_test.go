@@ -295,3 +295,23 @@ func TestOpenAtSetsBusyTimeout(t *testing.T) {
 		t.Fatalf("busy_timeout = %d, want 5000", ms)
 	}
 }
+
+func TestResolveLabelIDsAcceptsIDAndCaseInsensitiveName(t *testing.T) {
+	s := newTestStore(t)
+	blocked := newTestLabel(t, s, "Blocked")
+	review := newTestLabel(t, s, "Needs Review")
+
+	got, err := s.ResolveLabelIDs([]string{blocked.ID, "needs review", "BLOCKED"})
+	if err != nil {
+		t.Fatalf("ResolveLabelIDs: %v", err)
+	}
+	want := []string{blocked.ID, review.ID, blocked.ID}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ResolveLabelIDs = %v, want %v", got, want)
+	}
+
+	_, err = s.ResolveLabelIDs([]string{"Blocked", "Nope"})
+	if !errors.Is(err, ErrLabelNotFound) {
+		t.Fatalf("unknown label error = %v, want ErrLabelNotFound", err)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -571,6 +572,43 @@ func (s *Store) ListLabels() ([]models.Label, error) {
 		labels = append(labels, l)
 	}
 	return labels, rows.Err()
+}
+
+// ErrLabelNotFound is returned by ResolveLabelIDs for a reference that matches
+// neither a label ID nor a label name.
+var ErrLabelNotFound = errors.New("label not found")
+
+// ResolveLabelIDs maps each reference (a label ID, or a case-insensitive label
+// name) to a label ID, preserving order. Names are matched after IDs; with
+// duplicate names the first in ListLabels order (alphabetical) wins.
+func (s *Store) ResolveLabelIDs(refs []string) ([]string, error) {
+	labels, err := s.ListLabels()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		id := ""
+		for _, l := range labels {
+			if l.ID == ref {
+				id = l.ID
+				break
+			}
+		}
+		if id == "" {
+			for _, l := range labels {
+				if strings.EqualFold(l.Name, ref) {
+					id = l.ID
+					break
+				}
+			}
+		}
+		if id == "" {
+			return nil, fmt.Errorf("%w: %s", ErrLabelNotFound, ref)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func (s *Store) CreateLabel(req models.CreateLabelRequest) (*models.Label, error) {

@@ -225,3 +225,39 @@ func TestTicketGetJSONAndHuman(t *testing.T) {
 		t.Fatal("ticket get on unknown key returned nil error")
 	}
 }
+
+func TestLabelLifecycleViaCLI(t *testing.T) {
+	env := newCLIEnv(t)
+
+	var created models.Label
+	env.runJSON(&created, "label", "create", "Blocked", "--color", "#EF4444")
+	if created.ID == "" || created.Name != "Blocked" || created.Color != "#EF4444" {
+		t.Fatalf("label create --json = %+v", created)
+	}
+
+	var plain models.Label
+	env.runJSON(&plain, "label", "create", "Plain")
+	if plain.Color != "#6B7280" {
+		t.Fatalf("label create without --color stored %q, want default #6B7280", plain.Color)
+	}
+
+	var listed []models.Label
+	env.runJSON(&listed, "label", "list")
+	if len(listed) != 2 {
+		t.Fatalf("label list --json = %+v, want 2", listed)
+	}
+
+	var del map[string]any
+	env.runJSON(&del, "label", "delete", "blocked")
+	if del["deleted"] != true || del["id"] != created.ID {
+		t.Fatalf("label delete by name returned %v", del)
+	}
+	env.runJSON(&listed, "label", "list")
+	if len(listed) != 1 || listed[0].ID != plain.ID {
+		t.Fatalf("after delete, label list = %+v", listed)
+	}
+
+	if _, err := env.run("label", "delete", "Nope"); err == nil {
+		t.Fatal("deleting unknown label returned nil error")
+	}
+}
