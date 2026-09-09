@@ -2,8 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/tcarac/taskboard/internal/db"
 	"github.com/tcarac/taskboard/internal/models"
 )
 
@@ -86,6 +88,65 @@ func ticketCommands() *cobra.Command {
 	createCmd.Flags().StringVar(&createDue, "due", "", "due date (YYYY-MM-DD)")
 	createCmd.Flags().StringVar(&createTeam, "team", "", "team ID")
 
+	getCmd := &cobra.Command{
+		Use:   "get [ref]",
+		Short: "Show a ticket in full (ref is an ID or display key like WEB-12)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := openStore()
+			if err != nil {
+				return err
+			}
+			id, err := store.ResolveTicketID(args[0])
+			if err != nil {
+				return err
+			}
+			t, err := store.GetTicket(id)
+			if err != nil {
+				return err
+			}
+			if t == nil {
+				return db.ErrTicketNotFound
+			}
+			return emit(cmd, t, func() {
+				w := cmd.OutOrStdout()
+				fmt.Fprintf(w, "%s  %s  [%s, %s]\n", t.DisplayKey(), t.Title, t.Status, t.Priority)
+				fmt.Fprintf(w, "ID: %s\n", t.ID)
+				team, due := "-", "-"
+				if t.TeamID != nil {
+					team = *t.TeamID
+				}
+				if t.DueDate != nil {
+					due = t.DueDate.Format("2006-01-02")
+				}
+				fmt.Fprintf(w, "Project: %s   Team: %s   Due: %s\n", t.ProjectID, team, due)
+				names := make([]string, 0, len(t.Labels))
+				for _, l := range t.Labels {
+					names = append(names, l.Name)
+				}
+				if len(names) > 0 {
+					fmt.Fprintf(w, "Labels: %s\n", strings.Join(names, ", "))
+				}
+				if len(t.BlockedBy) > 0 {
+					fmt.Fprintf(w, "Blocked by: %s\n", strings.Join(t.BlockedBy, ", "))
+				}
+				if len(t.Subtasks) > 0 {
+					fmt.Fprintln(w, "Subtasks:")
+					for _, st := range t.Subtasks {
+						mark := " "
+						if st.Completed {
+							mark = "x"
+						}
+						fmt.Fprintf(w, "  [%s] %s (%s)\n", mark, st.Title, st.ID)
+					}
+				}
+				if t.Description != "" {
+					fmt.Fprintf(w, "\n%s\n", t.Description)
+				}
+			})
+		},
+	}
+
 	var moveStatus string
 	moveCmd := &cobra.Command{
 		Use:   "move [ref]",
@@ -140,6 +201,6 @@ func ticketCommands() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(listCmd, createCmd, moveCmd, deleteCmd)
+	cmd.AddCommand(listCmd, getCmd, createCmd, moveCmd, deleteCmd)
 	return cmd
 }

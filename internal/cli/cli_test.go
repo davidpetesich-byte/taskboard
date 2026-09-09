@@ -198,3 +198,30 @@ func TestTicketMoveHandlesDeletionBetweenResolutionAndMove(t *testing.T) {
 		t.Fatalf("move after concurrent deletion: err=%v out=%q", err, out)
 	}
 }
+
+func TestTicketGetJSONAndHuman(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	var created models.Ticket
+	env.runJSON(&created, "ticket", "create", "--project", p.ID, "--title", "Read me", "--priority", "high")
+
+	var got models.Ticket
+	env.runJSON(&got, "ticket", "get", "SMK-1")
+	if got.ID != created.ID || got.Title != "Read me" || got.Priority != "high" || got.ProjectPrefix != "SMK" {
+		t.Fatalf("ticket get --json = %+v", got)
+	}
+
+	out, err := env.run("ticket", "get", created.ID)
+	if err != nil {
+		t.Fatalf("ticket get: %v", err)
+	}
+	for _, want := range []string{"SMK-1", "Read me", "todo", "high"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("human ticket get missing %q:\n%s", want, out)
+		}
+	}
+
+	if _, err := env.run("ticket", "get", "SMK-2"); err == nil {
+		t.Fatal("ticket get on unknown key returned nil error")
+	}
+}
