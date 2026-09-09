@@ -15,7 +15,7 @@ func ticketCommands() *cobra.Command {
 		Short: "Manage tickets",
 	}
 
-	var projectID, status, priority string
+	var projectID, teamID, status, priority, labelRef string
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tickets",
@@ -26,11 +26,28 @@ func ticketCommands() *cobra.Command {
 			}
 			tickets, err := store.ListTickets(models.TicketFilter{
 				ProjectID: projectID,
+				TeamID:    teamID,
 				Status:    status,
 				Priority:  priority,
 			})
 			if err != nil {
 				return err
+			}
+			if labelRef != "" {
+				ids, err := store.ResolveLabelIDs([]string{labelRef})
+				if err != nil {
+					return err
+				}
+				kept := tickets[:0]
+				for _, t := range tickets {
+					for _, l := range t.Labels {
+						if l.ID == ids[0] {
+							kept = append(kept, t)
+							break
+						}
+					}
+				}
+				tickets = kept
 			}
 			if tickets == nil {
 				tickets = []models.Ticket{}
@@ -49,8 +66,11 @@ func ticketCommands() *cobra.Command {
 	listCmd.Flags().StringVar(&projectID, "project", "", "filter by project ID")
 	listCmd.Flags().StringVar(&status, "status", "", "filter by status (backlog|todo|in_progress|in_review|done)")
 	listCmd.Flags().StringVar(&priority, "priority", "", "filter by priority (urgent|high|medium|low)")
+	listCmd.Flags().StringVar(&teamID, "team", "", "filter by team ID")
+	listCmd.Flags().StringVar(&labelRef, "label", "", "filter by label (ID or name); applied after fetching")
 
-	var createProject, createPriority, createDue, createTeam string
+	var createProject, createPriority, createDue, createTeam, createStatus, createDesc, createDescFile string
+	var createLabels []string
 	createCmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new ticket",
@@ -60,16 +80,38 @@ func ticketCommands() *cobra.Command {
 				return err
 			}
 			title, _ := cmd.Flags().GetString("title")
+			if err := validatePriority(createPriority); err != nil {
+				return err
+			}
+			if createStatus != "" {
+				if err := validateStatus(createStatus); err != nil {
+					return err
+				}
+			}
+			desc, err := descriptionFromFlags(cmd, createDesc, createDescFile)
+			if err != nil {
+				return err
+			}
 			req := models.CreateTicketRequest{
 				ProjectID: createProject,
 				Title:     title,
 				Priority:  createPriority,
+				Status:    createStatus,
+			}
+			if desc != nil {
+				req.Description = *desc
 			}
 			if createDue != "" {
 				req.DueDate = &createDue
 			}
 			if createTeam != "" {
 				req.TeamID = &createTeam
+			}
+			if len(createLabels) > 0 {
+				req.Labels, err = store.ResolveLabelIDs(createLabels)
+				if err != nil {
+					return err
+				}
 			}
 			t, err := store.CreateTicket(req)
 			if err != nil {
@@ -87,6 +129,11 @@ func ticketCommands() *cobra.Command {
 	createCmd.Flags().StringVar(&createPriority, "priority", "medium", "priority (urgent|high|medium|low)")
 	createCmd.Flags().StringVar(&createDue, "due", "", "due date (YYYY-MM-DD)")
 	createCmd.Flags().StringVar(&createTeam, "team", "", "team ID")
+	createCmd.Flags().StringVar(&createStatus, "status", "", "initial status (backlog|todo|in_progress|in_review|done; default todo)")
+	createCmd.Flags().StringVar(&createDesc, "description", "", "markdown description")
+	createCmd.Flags().StringVar(&createDescFile, "description-file", "", "read the description from a file, or - for stdin")
+	createCmd.MarkFlagsMutuallyExclusive("description", "description-file")
+	createCmd.Flags().StringArrayVar(&createLabels, "label", nil, "label to attach (ID or name); repeatable")
 
 	getCmd := &cobra.Command{
 		Use:   "get [ref]",
@@ -147,6 +194,137 @@ func ticketCommands() *cobra.Command {
 		},
 	}
 
+	var upTitle, upDesc, upDescFile, upStatus, upPriority, upDue, upTeam string
+	var upLabels, upAddLabels, upRemoveLabels []string
+	var upClearLabels bool
+	updateCmd := &cobra.Command{
+		Use:   "update [ref]",
+		Short: "Update ticket fields and labels (only flags that are set are changed)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			changed := false
+			for _, name := range []string{"title", "description", "description-file", "status", "priority", "due", "team", "label", "add-label", "remove-label", "clear-labels"} {
+				if cmd.Flags().Changed(name) {
+					changed = true
+					break
+				}
+			}
+			if !changed {
+				return fmt.Errorf("nothing to update: pass at least one flag (see --help)")
+			}
+			store, err := openStore()
+			if err != nil {
+				return err
+			}
+			id, err := store.ResolveTicketID(args[0])
+			if err != nil {
+				return err
+			}
+
+			var req models.UpdateTicketRequest
+			if cmd.Flags().Changed("title") {
+				req.Title = &upTitle
+			}
+			if cmd.Flags().Changed("status") {
+				if err := validateStatus(upStatus); err != nil {
+					return err
+				}
+				req.Status = &upStatus
+			}
+			if cmd.Flags().Changed("priority") {
+				if err := validatePriority(upPriority); err != nil {
+					return err
+				}
+				req.Priority = &upPriority
+			}
+			if cmd.Flags().Changed("due") {
+				req.DueDate = &upDue
+			}
+			if cmd.Flags().Changed("team") {
+				req.TeamID = &upTeam
+			}
+			req.Description, err = descriptionFromFlags(cmd, upDesc, upDescFile)
+			if err != nil {
+				return err
+			}
+
+			switch {
+			case upClearLabels:
+				req.Labels = []string{}
+			case len(upLabels) > 0:
+				req.Labels, err = store.ResolveLabelIDs(upLabels)
+				if err != nil {
+					return err
+				}
+			case len(upAddLabels) > 0 || len(upRemoveLabels) > 0:
+				current, err := store.GetTicket(id)
+				if err != nil {
+					return err
+				}
+				if current == nil {
+					return db.ErrTicketNotFound
+				}
+				set := map[string]bool{}
+				order := []string{}
+				for _, l := range current.Labels {
+					set[l.ID] = true
+					order = append(order, l.ID)
+				}
+				add, err := store.ResolveLabelIDs(upAddLabels)
+				if err != nil {
+					return err
+				}
+				for _, lid := range add {
+					if !set[lid] {
+						set[lid] = true
+						order = append(order, lid)
+					}
+				}
+				remove, err := store.ResolveLabelIDs(upRemoveLabels)
+				if err != nil {
+					return err
+				}
+				for _, lid := range remove {
+					delete(set, lid)
+				}
+				req.Labels = []string{}
+				for _, lid := range order {
+					if set[lid] {
+						req.Labels = append(req.Labels, lid)
+					}
+				}
+			}
+
+			t, err := store.UpdateTicket(id, req)
+			if err != nil {
+				return err
+			}
+			if t == nil {
+				return db.ErrTicketNotFound
+			}
+			return emit(cmd, t, func() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: %s [%s, %s]\n", t.DisplayKey(), t.Title, t.Status, t.Priority)
+			})
+		},
+	}
+	updateCmd.Flags().StringVar(&upTitle, "title", "", "new title")
+	updateCmd.Flags().StringVar(&upDesc, "description", "", "new markdown description")
+	updateCmd.Flags().StringVar(&upDescFile, "description-file", "", "read the new description from a file, or - for stdin")
+	updateCmd.Flags().StringVar(&upStatus, "status", "", "new status (backlog|todo|in_progress|in_review|done)")
+	updateCmd.Flags().StringVar(&upPriority, "priority", "", "new priority (urgent|high|medium|low)")
+	updateCmd.Flags().StringVar(&upDue, "due", "", "new due date (YYYY-MM-DD)")
+	updateCmd.Flags().StringVar(&upTeam, "team", "", "new team ID")
+	updateCmd.Flags().StringArrayVar(&upLabels, "label", nil, "replace the label set with these (ID or name); repeatable")
+	updateCmd.Flags().StringArrayVar(&upAddLabels, "add-label", nil, "add a label (ID or name); repeatable")
+	updateCmd.Flags().StringArrayVar(&upRemoveLabels, "remove-label", nil, "remove a label (ID or name); repeatable")
+	updateCmd.Flags().BoolVar(&upClearLabels, "clear-labels", false, "remove every label")
+	updateCmd.MarkFlagsMutuallyExclusive("description", "description-file")
+	updateCmd.MarkFlagsMutuallyExclusive("label", "add-label")
+	updateCmd.MarkFlagsMutuallyExclusive("label", "remove-label")
+	updateCmd.MarkFlagsMutuallyExclusive("label", "clear-labels")
+	updateCmd.MarkFlagsMutuallyExclusive("clear-labels", "add-label")
+	updateCmd.MarkFlagsMutuallyExclusive("clear-labels", "remove-label")
+
 	var moveStatus string
 	moveCmd := &cobra.Command{
 		Use:   "move [ref]",
@@ -201,6 +379,6 @@ func ticketCommands() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(listCmd, getCmd, createCmd, moveCmd, deleteCmd)
+	cmd.AddCommand(listCmd, getCmd, createCmd, updateCmd, moveCmd, deleteCmd)
 	return cmd
 }

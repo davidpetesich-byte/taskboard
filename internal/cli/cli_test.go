@@ -3,7 +3,10 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -43,6 +46,12 @@ func (e *cliEnv) runJSON(v any, args ...string) {
 	out, err := e.run(append([]string{"--json"}, args...)...)
 	if err != nil {
 		e.t.Fatalf("%v: %v\n%s", args, err, out)
+	}
+	// Each invocation represents a fresh CLI consumer. Clear the destination so
+	// omitted `omitempty` fields cannot retain values from a prior response.
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer && !rv.IsNil() {
+		rv.Elem().Set(reflect.Zero(rv.Elem().Type()))
 	}
 	if err := json.Unmarshal([]byte(out), v); err != nil {
 		e.t.Fatalf("decoding output of %v: %v\n%s", args, err, out)
@@ -260,4 +269,187 @@ func TestLabelLifecycleViaCLI(t *testing.T) {
 	if _, err := env.run("label", "delete", "Nope"); err == nil {
 		t.Fatal("deleting unknown label returned nil error")
 	}
+}
+
+func TestTicketCreateWithDescriptionStatusAndLabels(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	var blocked models.Label
+	env.runJSON(&blocked, "label", "create", "Blocked")
+
+	env.stdin = "# Heading\n\nbody from stdin\n"
+	var created models.Ticket
+	env.runJSON(&created, "ticket", "create",
+		"--project", p.ID, "--title", "Full", "--status", "in_review",
+		"--description-file", "-", "--label", "blocked")
+	env.stdin = ""
+
+	if created.Status != "in_review" {
+		t.Errorf("status = %q, want in_review", created.Status)
+	}
+	if created.Description != "# Heading\n\nbody from stdin\n" {
+		t.Errorf("description = %q", created.Description)
+	}
+	if len(created.Labels) != 1 || created.Labels[0].ID != blocked.ID {
+		t.Errorf("labels = %+v, want Blocked", created.Labels)
+	}
+
+	out, err := env.run("ticket", "create", "--project", p.ID, "--title", "x", "--status", "wat")
+	if err == nil || !strings.Contains(out, "invalid status") {
+		t.Fatalf("create with bad status: err=%v out=%q", err, out)
+	}
+	var tickets []models.Ticket
+	env.runJSON(&tickets, "ticket", "list")
+	if len(tickets) != 1 {
+		t.Fatalf("invalid create wrote a ticket: %+v", tickets)
+	}
+}
+
+func TestTicketUpdateFieldsAndLabelSemantics(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	var a, b models.Label
+	env.runJSON(&a, "label", "create", "A")
+	env.runJSON(&b, "label", "create", "B")
+	var tk models.Ticket
+	env.runJSON(&tk, "ticket", "create", "--project", p.ID, "--title", "Orig", "--label", "A")
+
+	// Field update leaves labels alone.
+	env.runJSON(&tk, "ticket", "update", "SMK-1", "--title", "Renamed", "--priority", "urgent", "--description", "new body")
+	if tk.Title != "Renamed" || tk.Priority != "urgent" || tk.Description != "new body" || len(tk.Labels) != 1 {
+		t.Fatalf("after field update: %+v", tk)
+	}
+
+	// --add-label is a delta.
+	env.runJSON(&tk, "ticket", "update", "SMK-1", "--add-label", "b")
+	if ids := labelNames(tk); !reflect.DeepEqual(ids, []string{"A", "B"}) {
+		t.Fatalf("after --add-label: %v", ids)
+	}
+
+	// --remove-label is a delta.
+	env.runJSON(&tk, "ticket", "update", "SMK-1", "--remove-label", "A")
+	if ids := labelNames(tk); !reflect.DeepEqual(ids, []string{"B"}) {
+		t.Fatalf("after --remove-label: %v", ids)
+	}
+
+	// --label replaces the set.
+	env.runJSON(&tk, "ticket", "update", "SMK-1", "--label", "A")
+	if ids := labelNames(tk); !reflect.DeepEqual(ids, []string{"A"}) {
+		t.Fatalf("after --label replace: %v", ids)
+	}
+
+	// --clear-labels empties it.
+	env.runJSON(&tk, "ticket", "update", "SMK-1", "--clear-labels")
+	if len(tk.Labels) != 0 {
+		t.Fatalf("after --clear-labels: %+v", tk.Labels)
+	}
+
+	// Replace-style and delta-style flags are mutually exclusive.
+	for _, flags := range [][]string{
+		{"--label", "A", "--add-label", "B"},
+		{"--label", "A", "--remove-label", "B"},
+		{"--label", "A", "--clear-labels"},
+		{"--clear-labels", "--add-label", "A"},
+		{"--clear-labels", "--remove-label", "A"},
+	} {
+		args := append([]string{"ticket", "update", "SMK-1"}, flags...)
+		if _, err := env.run(args...); err == nil {
+			t.Fatalf("conflicting label flags %v should be rejected", flags)
+		}
+	}
+	// No flags at all is an error, not a silent no-op.
+	if _, err := env.run("ticket", "update", "SMK-1"); err == nil {
+		t.Fatal("update with no flags should be rejected")
+	}
+}
+
+func TestTicketUpdateValidatesBeforeWriting(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	var tk models.Ticket
+	env.runJSON(&tk, "ticket", "create", "--project", p.ID, "--title", "Original")
+
+	for _, tc := range []struct {
+		name  string
+		flags []string
+		want  string
+	}{
+		{name: "status", flags: []string{"--title", "Mutated", "--status", "wat"}, want: "invalid status"},
+		{name: "priority", flags: []string{"--title", "Mutated", "--priority", "wat"}, want: "invalid priority"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"ticket", "update", tk.ID}, tc.flags...)
+			out, err := env.run(args...)
+			if err == nil || !strings.Contains(out, tc.want) {
+				t.Fatalf("invalid update: err=%v out=%q", err, out)
+			}
+			var got models.Ticket
+			env.runJSON(&got, "ticket", "get", tk.ID)
+			if got.Title != "Original" || got.Status != "todo" || got.Priority != "medium" {
+				t.Fatalf("invalid update mutated ticket: %+v", got)
+			}
+		})
+	}
+}
+
+func TestTicketDescriptionFromFile(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	path := filepath.Join(t.TempDir(), "description.md")
+	if err := os.WriteFile(path, []byte("body from file\n"), 0o600); err != nil {
+		t.Fatalf("write description fixture: %v", err)
+	}
+
+	var tk models.Ticket
+	env.runJSON(&tk, "ticket", "create", "--project", p.ID, "--title", "File", "--description-file", path)
+	if tk.Description != "body from file\n" {
+		t.Fatalf("create description = %q", tk.Description)
+	}
+
+	if err := os.WriteFile(path, []byte("updated from file\n"), 0o600); err != nil {
+		t.Fatalf("update description fixture: %v", err)
+	}
+	env.runJSON(&tk, "ticket", "update", tk.ID, "--description-file", path)
+	if tk.Description != "updated from file\n" {
+		t.Fatalf("update description = %q", tk.Description)
+	}
+}
+
+func TestTicketListFiltersByLabel(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	env.runJSON(new(models.Label), "label", "create", "Blocked")
+	env.runJSON(new(models.Ticket), "ticket", "create", "--project", p.ID, "--title", "tagged", "--label", "Blocked")
+	env.runJSON(new(models.Ticket), "ticket", "create", "--project", p.ID, "--title", "plain")
+
+	var tickets []models.Ticket
+	env.runJSON(&tickets, "ticket", "list", "--label", "blocked")
+	if len(tickets) != 1 || tickets[0].Title != "tagged" {
+		t.Fatalf("ticket list --label = %+v", tickets)
+	}
+}
+
+func TestTicketListFiltersByTeam(t *testing.T) {
+	env := newCLIEnv(t)
+	p := env.project()
+	var team models.Team
+	env.runJSON(&team, "team", "create", "CLI")
+	env.runJSON(new(models.Ticket), "ticket", "create", "--project", p.ID, "--title", "assigned", "--team", team.ID)
+	env.runJSON(new(models.Ticket), "ticket", "create", "--project", p.ID, "--title", "unassigned")
+
+	var tickets []models.Ticket
+	env.runJSON(&tickets, "ticket", "list", "--team", team.ID)
+	if len(tickets) != 1 || tickets[0].Title != "assigned" {
+		t.Fatalf("ticket list --team = %+v", tickets)
+	}
+}
+
+// labelNames returns a ticket's label names sorted, for stable comparison.
+func labelNames(t models.Ticket) []string {
+	names := make([]string, 0, len(t.Labels))
+	for _, l := range t.Labels {
+		names = append(names, l.Name)
+	}
+	sort.Strings(names)
+	return names
 }
