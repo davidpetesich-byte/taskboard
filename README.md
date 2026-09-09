@@ -65,18 +65,34 @@ taskboard start
 taskboard start --port 8080
 ```
 
-### CLI
+### CLI (for scripts and agents)
+
+Every command accepts `--json` and then prints the same structure the REST API returns
+(an object, or an array for `list` commands; `[]` when empty). Errors go to stderr with a
+non-zero exit code. Tickets may be referenced by ID or by display key (`WEB-12`); labels by
+ID or by an unambiguous, case-insensitive name. If more than one label has the same name,
+the command errors and requires a label ID. Due dates must use `YYYY-MM-DD`.
+
+| Command | Purpose |
+|---|---|
+| `taskboard board [--project ID]` | All five columns with their tickets |
+| `taskboard ticket list [--project ID] [--team ID] [--status S] [--priority P] [--label REF]` | List tickets |
+| `taskboard ticket get REF` | Full ticket: description, labels, subtasks, blockers |
+| `taskboard ticket create --project ID --title T [--status S] [--priority P] [--due YYYY-MM-DD] [--team ID] [--description MD \| --description-file PATH\|-] [--label REF ...]` | Create a ticket |
+| `taskboard ticket update REF [--title T] [--status S] [--priority P] [--due YYYY-MM-DD] [--team ID] [--description MD \| --description-file PATH\|-] [--label REF ... \| --add-label REF ... --remove-label REF ... \| --clear-labels]` | Update only the fields given |
+| `taskboard ticket move REF --status S` | Change status |
+| `taskboard ticket delete REF` | Delete a ticket |
+| `taskboard label list` / `label create NAME [--color #HEX]` / `label delete REF` | Manage labels |
+| `taskboard subtask add TICKET-REF TITLE` / `subtask toggle ID` / `subtask delete ID` | Manage subtasks |
+| `taskboard project list` / `project create NAME --prefix P` / `project delete ID` | Manage projects |
+| `taskboard team list` / `team create NAME` / `team delete ID` | Manage teams |
+
+Statuses: `backlog`, `todo`, `in_progress`, `in_review`, `done`. Priorities: `urgent`,
+`high`, `medium`, `low`. Example:
 
 ```bash
-taskboard project create "Auth System" --prefix AUTH --icon "🔐"
-taskboard project list
-
-taskboard ticket create --project <ID> --title "Implement login" --priority high
-taskboard ticket list --project <ID> --status todo
-taskboard ticket move <ID> --status done
-
-taskboard team create "Backend"
-taskboard team list
+taskboard --json ticket get WEB-1 | jq .status
+printf '# Plan\n\n- step one\n' | taskboard ticket update WEB-1 --description-file - --add-label Blocked
 ```
 
 ### MCP Server (for AI assistants)
