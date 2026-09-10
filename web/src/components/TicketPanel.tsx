@@ -337,7 +337,7 @@ export default function TicketPanel({
             <span>This ticket changed elsewhere. Reload to see the latest version; your unsaved edits will be discarded.</span>
             <button
               type="button"
-              onClick={() => adoptTicket(remoteTicket)}
+              onClick={() => adoptTicket(remoteTicket, false)}
               className="rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium text-amber-900 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               Reload
