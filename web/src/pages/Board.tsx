@@ -43,6 +43,7 @@ function PriorityBadge({ priority }: { priority: string }) {
   const Icon = config.icon;
   return (
     <span
+      role="img"
       aria-label={`${priority} priority`}
       title={`${priority} priority`}
       className={`inline-flex items-center ${config.color}`}
