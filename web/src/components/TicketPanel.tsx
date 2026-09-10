@@ -353,9 +353,12 @@ export default function TicketPanel({
 
   const handleDeleteComment = async (id: string) => {
     commentVersionRef.current += 1;
+    setCommentError("");
     try {
       await api.comments.delete(id);
       setComments((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      setCommentError("Could not delete comment. Please try again.");
     } finally {
       commentVersionRef.current += 1;
     }

@@ -179,7 +179,7 @@ Project → Ticket → Subtask
 | `batch_create_subtasks` | Add multiple subtasks to a ticket at once        |
 | `toggle_subtask`        | Toggle subtask completion                        |
 | `delete_subtask`        | Remove a subtask from a ticket                   |
-| `add_comment`           | Add a Markdown comment to a ticket (author defaults to `agent`) |
+| `add_comment`           | Add a Markdown comment (default author `agent`)  |
 | `delete_comment`        | Remove a comment                                 |
 
 #### Example Prompts

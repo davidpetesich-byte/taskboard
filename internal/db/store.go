@@ -740,13 +740,6 @@ func (s *Store) DeleteSubtask(id string) error {
 // AddComment appends a comment to a ticket. It returns ErrTicketNotFound when
 // the ticket does not exist so callers can map it to a 404.
 func (s *Store) AddComment(ticketID string, req models.CreateCommentRequest) (*models.Comment, error) {
-	var exists int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM tickets WHERE id = ?", ticketID).Scan(&exists); err != nil {
-		return nil, err
-	}
-	if exists == 0 {
-		return nil, ErrTicketNotFound
-	}
 	author := req.Author
 	if author == "" {
 		author = "unknown"
@@ -765,6 +758,12 @@ func (s *Store) AddComment(ticketID string, req models.CreateCommentRequest) (*m
 		"INSERT INTO comments (id, ticket_id, author, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
 		id, ticketID, author, req.Body, now, now,
 	); err != nil {
+		// The foreign key rejects unknown tickets atomically, so there is no
+		// check-then-insert window. Classify that failure for callers.
+		var exists int
+		if scanErr := s.db.QueryRow("SELECT COUNT(*) FROM tickets WHERE id = ?", ticketID).Scan(&exists); scanErr == nil && exists == 0 {
+			return nil, ErrTicketNotFound
+		}
 		return nil, err
 	}
 	return s.GetComment(id)
