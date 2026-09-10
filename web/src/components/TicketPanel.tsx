@@ -25,6 +25,21 @@ const sameSubtasks = (a: Subtask[], b: Subtask[]) =>
   a.length === b.length &&
   a.every((s, i) => s.id === b[i].id && s.title === b[i].title && s.completed === b[i].completed);
 
+const sameSavedFields = (fresh: Ticket, saved: TicketInput) => {
+  const freshLabelIds = (fresh.labels || []).map((label) => label.id);
+  const savedLabelIds = saved.labels || [];
+  return (
+    fresh.title === saved.title &&
+    (fresh.description || "") === (saved.description || "") &&
+    fresh.status === saved.status &&
+    fresh.priority === saved.priority &&
+    toDateInput(fresh.dueDate) === (saved.dueDate || "") &&
+    (fresh.teamId || "") === (saved.teamId || "") &&
+    freshLabelIds.length === savedLabelIds.length &&
+    freshLabelIds.every((id) => savedLabelIds.includes(id))
+  );
+};
+
 const fieldClass =
   "w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500";
 const iconButtonClass =
@@ -108,7 +123,7 @@ export default function TicketPanel({
   }, []);
 
   // Replace every editable value with the server's version and mark the tree clean.
-  const adoptTicket = useCallback((fresh: Ticket) => {
+  const adoptTicket = useCallback((fresh: Ticket, adoptSubtasks = true) => {
     setTitle(fresh.title);
     setDescription(fresh.description || "");
     setStatus(fresh.status);
@@ -117,7 +132,9 @@ export default function TicketPanel({
     setTeamId(fresh.teamId || "");
     setLabelIds((fresh.labels || []).map((l) => l.id));
     setAllLabels((prev) => mergeLabels(prev, fresh.labels || []));
-    setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
+    if (adoptSubtasks) {
+      setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
+    }
     lastSeenUpdatedAt.current = fresh.updatedAt;
     editVersionRef.current += 1;
     dirtyRef.current = false;
@@ -190,7 +207,7 @@ export default function TicketPanel({
     setSaving(true);
     setSaveError("");
     try {
-      await onUpdate(ticket.id, {
+      const savedInput: TicketInput = {
         title,
         description,
         status,
@@ -198,18 +215,32 @@ export default function TicketPanel({
         dueDate: dueDate || undefined,
         teamId: teamId || undefined,
         labels: labelIds,
-      });
+      };
+      await onUpdate(ticket.id, savedInput);
       if (editVersionRef.current === editVersion) {
         dirtyRef.current = false;
         setDirty(false);
         setRemoteTicket(null);
       }
       try {
+        const subtaskVersion = subtaskVersionRef.current;
         const fresh = await api.tickets.get(ticket.id);
-        // Our own save is not a remote change: mark it seen even if the user
-        // has already started editing again, so the next poll stays quiet.
-        lastSeenUpdatedAt.current = fresh.updatedAt;
-        if (editVersionRef.current === editVersion) adoptTicket(fresh);
+        const canAdoptSubtasks = subtaskVersionRef.current === subtaskVersion;
+        if (editVersionRef.current === editVersion) {
+          adoptTicket(fresh, canAdoptSubtasks);
+        } else {
+          if (canAdoptSubtasks) {
+            setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
+          }
+          // A new local edit started while the save was settling. A response
+          // matching the submitted fields is our own save and can be marked
+          // seen quietly; a different response is a real remote conflict.
+          if (sameSavedFields(fresh, savedInput)) {
+            lastSeenUpdatedAt.current = fresh.updatedAt;
+          } else {
+            setRemoteTicket(fresh);
+          }
+        }
       } catch {
         // Keep local values; the next poll will reconcile.
       }
