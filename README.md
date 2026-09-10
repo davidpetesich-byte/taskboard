@@ -76,21 +76,22 @@ this JSON contract.
 Tickets may be referenced by ID or by display key (`WEB-12`); labels by ID or by an
 unambiguous, case-insensitive name. If more than one label has the same name, the command
 errors and requires a label ID. Due dates must use `YYYY-MM-DD`.
-Optional fields that are empty (`description`, `labels`, `subtasks`, `blockedBy`, `dueDate`,
-`teamId`) are omitted from the JSON rather than emitted as empty values, so treat a missing
-key as empty.
+Optional fields that are empty (`description`, `labels`, `subtasks`, `comments`, `blockedBy`,
+`dueDate`, `teamId`) are omitted from the JSON rather than emitted as empty values, so treat
+a missing key as empty.
 
 | Command | Purpose |
 |---|---|
 | `taskboard board [--project ID]` | All five columns with their tickets |
 | `taskboard ticket list [--project ID] [--team ID] [--status S] [--priority P] [--label REF]` | List tickets |
-| `taskboard ticket get REF` | Full ticket: description, labels, subtasks, blockers |
+| `taskboard ticket get REF` | Full ticket: description, labels, subtasks, comments, blockers |
 | `taskboard ticket create --project ID --title T [--status S] [--priority P] [--due YYYY-MM-DD] [--team ID] [--description MD \| --description-file PATH\|-] [--label REF]...` | Create a ticket |
 | `taskboard ticket update REF [--title T] [--status S] [--priority P] [--due YYYY-MM-DD] [--team ID] [--description MD \| --description-file PATH\|-] [[--label REF]... \| [--add-label REF]... [--remove-label REF]... \| --clear-labels]` | Update only the fields given |
 | `taskboard ticket move REF --status S` | Change status |
 | `taskboard ticket delete REF` | Delete a ticket |
 | `taskboard label list` / `label create NAME [--color '#RRGGBB']` / `label delete REF` | Manage labels |
 | `taskboard subtask add TICKET-REF TITLE` / `subtask toggle ID` / `subtask delete ID` | Manage subtasks |
+| `taskboard comment add TICKET-REF BODY` / `--body-file -` / `comment list TICKET-REF` / `comment delete ID` | Manage comments (`--author` defaults to `cli`) |
 | `taskboard project list` / `project create NAME --prefix P` / `project delete ID` | Manage projects |
 | `taskboard team list` / `team create NAME` / `team delete ID` | Manage teams |
 

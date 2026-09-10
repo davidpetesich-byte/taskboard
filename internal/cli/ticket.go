@@ -202,6 +202,13 @@ func ticketCommands() *cobra.Command {
 						fmt.Fprintf(w, "  [%s] %s (%s)\n", mark, st.Title, st.ID)
 					}
 				}
+				if len(t.Comments) > 0 {
+					fmt.Fprintln(w, "Comments:")
+					for _, c := range t.Comments {
+						fmt.Fprintf(w, "  --- %s · %s (%s)\n", c.Author, c.CreatedAt.Format("2006-01-02T15:04:05Z07:00"), c.ID)
+						fmt.Fprintf(w, "  %s\n", strings.ReplaceAll(c.Body, "\n", "\n  "))
+					}
+				}
 				if t.Description != "" {
 					fmt.Fprintf(w, "\n%s\n", t.Description)
 				}
