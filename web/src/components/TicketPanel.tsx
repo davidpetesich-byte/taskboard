@@ -63,7 +63,7 @@ export default function TicketPanel({
   const [subtasks, setSubtasks] = useState<Subtask[]>(ticket.subtasks || []);
   const [newSubtask, setNewSubtask] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [descMode, setDescMode] = useState<"view" | "edit">(ticket.description ? "view" : "edit");
+  const [descMode, setDescMode] = useState<"view" | "edit">("view");
   const [labelIds, setLabelIds] = useState((ticket.labels || []).map((l) => l.id));
   const [allLabels, setAllLabels] = useState<Label[]>(() => mergeLabels([], ticket.labels || []));
   const [labelsLoading, setLabelsLoading] = useState(true);
