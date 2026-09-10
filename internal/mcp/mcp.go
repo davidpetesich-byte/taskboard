@@ -107,7 +107,7 @@ func (s *MCPServer) handleRequest(req jsonrpcRequest) *jsonrpcResponse {
 				},
 				"serverInfo": map[string]any{
 					"name":    "taskboard",
-					"version": "0.6.3-dp1",
+					"version": "0.6.3-dp2",
 				},
 			},
 		}
