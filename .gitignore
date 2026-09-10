@@ -14,20 +14,20 @@ vendor/
 *.db-journal
 *.db-wal
 *.db-shm
-
 # Frontend
 web/node_modules/
 web/dist/
-
 # Embedded build artifacts
 cmd/taskboard/web/
-
 # OS
 .DS_Store
 Thumbs.db
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+# Local git worktrees
+.worktrees/
+# Superpowers SDD scratch
+.superpowers/
