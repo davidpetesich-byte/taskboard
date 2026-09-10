@@ -1,12 +1,15 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/creack/pty"
@@ -75,11 +78,16 @@ func (s *Server) setupRoutes(webFS fs.FS) {
 			r.Post("/{id}/move", s.moveTicket)
 			r.Delete("/{id}", s.deleteTicket)
 			r.Post("/{id}/subtasks", s.addSubtask)
+			r.Post("/{id}/comments", s.addComment)
 		})
 
 		r.Route("/subtasks", func(r chi.Router) {
 			r.Post("/{id}/toggle", s.toggleSubtask)
 			r.Delete("/{id}", s.deleteSubtask)
+		})
+
+		r.Route("/comments", func(r chi.Router) {
+			r.Delete("/{id}", s.deleteComment)
 		})
 
 		r.Route("/labels", func(r chi.Router) {
@@ -386,6 +394,41 @@ func (s *Server) toggleSubtask(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteSubtask(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteSubtask(chi.URLParam(r, "id")); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) addComment(w http.ResponseWriter, r *http.Request) {
+	var req models.CreateCommentRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if strings.TrimSpace(req.Body) == "" {
+		writeError(w, http.StatusBadRequest, "body is required")
+		return
+	}
+	c, err := s.store.AddComment(chi.URLParam(r, "id"), req)
+	if errors.Is(err, db.ErrTicketNotFound) {
+		writeError(w, http.StatusNotFound, "ticket not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, c)
+}
+
+func (s *Server) deleteComment(w http.ResponseWriter, r *http.Request) {
+	err := s.store.DeleteComment(chi.URLParam(r, "id"))
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "comment not found")
+		return
+	}
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

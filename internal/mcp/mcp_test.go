@@ -34,8 +34,8 @@ func findTool(t *testing.T, s *MCPServer, name string) toolDef {
 
 func TestToolDefinitionsCount(t *testing.T) {
 	s, _ := newTestServer(t)
-	if got := len(s.toolDefinitions()); got != 24 {
-		t.Fatalf("expected 24 tools, got %d", got)
+	if got := len(s.toolDefinitions()); got != 26 {
+		t.Fatalf("expected 26 tools, got %d", got)
 	}
 }
 

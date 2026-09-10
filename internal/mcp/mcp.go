@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -366,6 +368,34 @@ func (s *MCPServer) callTool(name string, args json.RawMessage) (any, error) {
 		json.Unmarshal(args, &a)
 		return s.store.ToggleSubtask(a.ID)
 
+	case "add_comment":
+		var a struct {
+			TicketID string `json:"ticketId"`
+			Body     string `json:"body"`
+			Author   string `json:"author"`
+		}
+		json.Unmarshal(args, &a)
+		if a.TicketID == "" || a.Body == "" {
+			return nil, fmt.Errorf("ticketId and body are required")
+		}
+		if a.Author == "" {
+			a.Author = "agent"
+		}
+		return s.store.AddComment(a.TicketID, models.CreateCommentRequest{Author: a.Author, Body: a.Body})
+
+	case "delete_comment":
+		var a struct {
+			ID string `json:"id"`
+		}
+		json.Unmarshal(args, &a)
+		if err := s.store.DeleteComment(a.ID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("comment not found")
+			}
+			return nil, err
+		}
+		return map[string]bool{"deleted": true}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
@@ -502,7 +532,7 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 		},
 		{
 			Name:        "get_ticket",
-			Description: "Get detailed ticket information including subtasks, labels, and dependencies",
+			Description: "Get detailed ticket information including subtasks, labels, dependencies, and comments",
 			InputSchema: jsonSchema{
 				Type:       "object",
 				Properties: map[string]schemaProp{"id": {Type: "string", Description: "Ticket ID"}},
@@ -656,6 +686,30 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 			InputSchema: jsonSchema{
 				Type:       "object",
 				Properties: map[string]schemaProp{"id": {Type: "string", Description: "Subtask ID"}},
+				Required:   []string{"id"},
+			},
+		},
+		// --- Comments (discussion on a ticket) ---
+		{
+			Name: "add_comment",
+			Description: "Add a comment to a ticket. Use comments to record findings, status notes, and what you looked at, " +
+				"instead of rewriting the ticket description. Body is Markdown. Author defaults to \"agent\"; pass your name if you have one.",
+			InputSchema: jsonSchema{
+				Type: "object",
+				Properties: map[string]schemaProp{
+					"ticketId": {Type: "string", Description: "Ticket ID"},
+					"body":     {Type: "string", Description: "Comment body (Markdown)"},
+					"author":   {Type: "string", Description: "Author name (default: agent)"},
+				},
+				Required: []string{"ticketId", "body"},
+			},
+		},
+		{
+			Name:        "delete_comment",
+			Description: "Delete a comment from a ticket",
+			InputSchema: jsonSchema{
+				Type:       "object",
+				Properties: map[string]schemaProp{"id": {Type: "string", Description: "Comment ID"}},
 				Required:   []string{"id"},
 			},
 		},
