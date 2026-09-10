@@ -34,7 +34,7 @@ func newStoreWithTicket(t *testing.T) (*Store, *models.Ticket) {
 }
 
 func TestAddCommentReturnsPersistedComment(t *testing.T) {
-	store, ticket := newStoreWithTicket(t) // write this helper in this file if store_test.go has no equivalent
+	store, ticket := newStoreWithTicket(t)
 	c, err := store.AddComment(ticket.ID, models.CreateCommentRequest{Author: "David", Body: "# Found it\n\nrow 12 is wrong"})
 	if err != nil {
 		t.Fatalf("AddComment: %v", err)
