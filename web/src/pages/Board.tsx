@@ -107,7 +107,7 @@ function TicketCard({
       {ticket.labels && ticket.labels.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {ticket.labels.map((label) => (
-            <LabelChip key={label.id} label={label} variant="board" />
+            <LabelChip key={label.id} label={label} />
           ))}
         </div>
       )}
@@ -482,7 +482,6 @@ export default function Board() {
             <LabelChip
               key={label.id}
               label={label}
-              variant="board"
               active={effectiveFilterLabelId === label.id}
               onClick={() =>
                 setFilterLabelId((current) =>

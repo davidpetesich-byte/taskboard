@@ -70,7 +70,7 @@ export default function LabelPicker({
             if (!busyRef.current) setOpen((o) => !o);
           }}
           disabled={busy}
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-600 px-2 py-0.5 text-[11px] text-slate-400 hover:text-slate-200 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1 rounded-[3px] border border-dashed border-slate-400 px-2 py-0.5 text-[11px] text-slate-600 hover:border-slate-600 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
         >
           <Plus className="w-3 h-3" />
           Add label
@@ -78,7 +78,7 @@ export default function LabelPicker({
       </div>
 
       {open && (
-        <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3 space-y-3">
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-3">
           {available.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {available.map((l) => (
@@ -86,7 +86,7 @@ export default function LabelPicker({
               ))}
             </div>
           ) : (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
               {allLabels.length === 0 ? "No labels yet - create one below." : "All labels attached."}
             </p>
           )}
@@ -105,7 +105,7 @@ export default function LabelPicker({
                 }
               }}
               placeholder="New label…"
-              className="min-w-40 flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-w-40 flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <div className="flex flex-wrap gap-1">
               {LABEL_COLORS.map((c) => (
@@ -118,7 +118,7 @@ export default function LabelPicker({
                   disabled={busy}
                   aria-label={`Color ${c}`}
                   aria-pressed={newColor === c}
-                  className={`w-6 h-6 rounded-full disabled:cursor-not-allowed disabled:opacity-50 ${newColor === c ? "ring-2 ring-white/70" : ""}`}
+                  className={`w-6 h-6 rounded-full disabled:cursor-not-allowed disabled:opacity-50 ${newColor === c ? "ring-2 ring-offset-1 ring-blue-500" : ""}`}
                   style={{ backgroundColor: c }}
                 />
               ))}
@@ -127,13 +127,13 @@ export default function LabelPicker({
               type="button"
               onClick={handleCreate}
               disabled={busy || !newName.trim()}
-              className="px-2.5 py-1 text-xs font-medium bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 rounded-lg transition-colors"
+              className="px-2.5 py-1 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 transition-colors"
             >
               Create
             </button>
           </div>
           {error && (
-            <p role="alert" className="text-xs text-red-400">
+            <p role="alert" className="text-xs text-red-600">
               {error}
             </p>
           )}

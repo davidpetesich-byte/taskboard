@@ -144,3 +144,63 @@ body {
   border-top: 1px solid #1e293b; /* slate-800 */
   margin: 0.625rem 0;
 }
+
+/* Light Markdown rendering for the ticket modal. */
+.prose-doc {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: #1e293b; /* slate-800 */
+}
+.prose-doc > :first-child { margin-top: 0; }
+.prose-doc > :last-child { margin-bottom: 0; }
+.prose-doc p { margin: 0.5rem 0; }
+.prose-doc strong { color: #0f172a; font-weight: 600; }
+.prose-doc em { font-style: italic; }
+.prose-doc a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
+.prose-doc a:hover { color: #1d4ed8; }
+.prose-doc code {
+  font-size: 0.8em;
+  background: #f1f5f9; /* slate-100 */
+  color: #0f172a;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+.prose-doc pre {
+  overflow-x: auto;
+  background: #f8fafc; /* slate-50 */
+  border: 1px solid #e2e8f0; /* slate-200 */
+  border-radius: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  margin: 0.625rem 0;
+  font-size: 0.8em;
+  line-height: 1.5;
+}
+.prose-doc pre code { background: none; padding: 0; border-radius: 0; color: #1e293b; }
+.prose-doc h1, .prose-doc h2, .prose-doc h3, .prose-doc h4 {
+  color: #0f172a; /* slate-900 */
+  font-weight: 600;
+  margin: 1rem 0 0.375rem;
+}
+.prose-doc h1 { font-size: 1.25rem; }
+.prose-doc h2 { font-size: 1.125rem; }
+.prose-doc h3 { font-size: 1rem; }
+.prose-doc h4 { font-size: 0.9375rem; }
+.prose-doc ul, .prose-doc ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+.prose-doc ul { list-style-type: disc; }
+.prose-doc ol { list-style-type: decimal; }
+.prose-doc li { margin: 0.25rem 0; }
+.prose-doc li::marker { color: #64748b; }
+.prose-doc li.task-list-item { list-style: none; margin-left: -1.25rem; }
+.prose-doc li.task-list-item input[type="checkbox"] { margin-right: 0.5rem; vertical-align: -0.1em; }
+.prose-doc blockquote {
+  border-left: 3px solid #cbd5e1; /* slate-300 */
+  padding-left: 0.75rem;
+  margin: 0.625rem 0;
+  color: #475569; /* slate-600 */
+}
+.prose-doc hr { border: none; border-top: 1px solid #e2e8f0; margin: 1rem 0; }
+.prose-doc table { border-collapse: collapse; margin: 0.625rem 0; width: 100%; font-size: 0.85em; }
+.prose-doc th, .prose-doc td { border: 1px solid #e2e8f0; padding: 0.375rem 0.5rem; text-align: left; vertical-align: top; }
+.prose-doc th { background: #f1f5f9; font-weight: 600; color: #0f172a; }
+.prose-doc del { color: #64748b; }
