@@ -28,7 +28,7 @@ import { api, type Ticket, type TicketInput, type Project, type Team, type Board
 import TicketPanel from "../components/TicketPanel";
 import CreateTicketModal from "../components/CreateTicketModal";
 import LabelChip from "../components/LabelChip";
-import { STATUSES, STATUS_LABELS, STATUS_COLORS } from "../constants/statuses";
+import { STATUSES, STATUS_LABELS } from "../constants/statuses";
 
 const PRIORITY_CONFIG: Record<string, { color: string; icon: typeof ArrowUp }> = {
   urgent: { color: "text-red-500", icon: AlertTriangle },
@@ -42,23 +42,29 @@ function PriorityBadge({ priority }: { priority: string }) {
   if (!config) return null;
   const Icon = config.icon;
   return (
-    <span className={`inline-flex items-center gap-1 text-xs ${config.color}`}>
-      <Icon className="w-3 h-3" />
-      {priority}
+    <span
+      aria-label={`${priority} priority`}
+      title={`${priority} priority`}
+      className={`inline-flex items-center ${config.color}`}
+    >
+      <Icon aria-hidden="true" className="h-3.5 w-3.5" />
     </span>
   );
 }
 
 function SubtaskProgress({ subtasks }: { subtasks: Ticket["subtasks"] }) {
   if (!subtasks || subtasks.length === 0) return null;
-  const done = subtasks.filter((s) => s.completed).length;
+  const done = subtasks.filter((candidate) => candidate.completed).length;
   const pct = Math.round((done / subtasks.length) * 100);
   return (
-    <div className="flex items-center gap-2 text-xs text-slate-500">
-      <CheckCircle2 className="w-3 h-3" />
-      <div className="flex-1 h-1 rounded-full bg-slate-700 overflow-hidden">
+    <div
+      title={`${done} of ${subtasks.length} subtasks complete`}
+      className="flex items-center gap-1.5 text-[11px] text-slate-500"
+    >
+      <CheckCircle2 aria-hidden="true" className="h-3 w-3" />
+      <div className="h-1 w-8 overflow-hidden rounded-full bg-slate-200">
         <div
-          className="h-full bg-blue-500 rounded-full transition-all"
+          className="h-full rounded-full bg-blue-500 transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -82,27 +88,25 @@ function TicketCard({
   isDragging?: boolean;
   onClick?: () => void;
 }) {
-  const project = projects.find((p) => p.id === ticket.projectId);
-  const team = teams.find((t) => t.id === ticket.teamId);
+  const project = projects.find((candidate) => candidate.id === ticket.projectId);
+  const team = teams.find((candidate) => candidate.id === ticket.teamId);
 
   return (
     <div
       onClick={onClick}
-      className={`rounded-lg border border-slate-700/50 bg-slate-900 p-3 space-y-2 transition-colors hover:border-slate-600 cursor-pointer ${
-        isDragging ? "opacity-90 shadow-xl shadow-blue-500/10 rotate-2" : ""
+      className={`cursor-pointer space-y-2 rounded-[5px] border bg-white px-3 py-2.5 transition-[border-color,box-shadow] ${
+        isDragging
+          ? "border-blue-400 shadow-[0_8px_20px_rgba(9,30,66,0.24)]"
+          : "border-slate-300 shadow-[0_1px_1px_rgba(9,30,66,0.12)] hover:border-blue-400 hover:shadow-[0_2px_4px_rgba(9,30,66,0.16)]"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-[11px] font-mono text-slate-500">
-          {ticket.projectPrefix}-{ticket.number}
-        </span>
-        <PriorityBadge priority={ticket.priority} />
-      </div>
-      <p className="text-sm text-slate-200 leading-snug">{ticket.title}</p>
+      <p className="text-[13px] font-medium leading-[1.35] text-slate-800">
+        {ticket.title}
+      </p>
       {ticket.labels && ticket.labels.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {ticket.labels.map((l) => (
-            <LabelChip key={l.id} label={l} />
+          {ticket.labels.map((label) => (
+            <LabelChip key={label.id} label={label} variant="board" />
           ))}
         </div>
       )}
@@ -110,37 +114,48 @@ function TicketCard({
         <div className="flex flex-wrap items-center gap-1.5">
           {project && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+              className="inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] font-medium"
               style={{
-                backgroundColor: (project.color || "#3b82f6") + "1a",
+                backgroundColor: (project.color || "#3b82f6") + "14",
                 color: project.color || "#3b82f6",
               }}
             >
-              <FolderKanban className="w-3 h-3" />
+              <FolderKanban aria-hidden="true" className="h-3 w-3" />
               {project.name}
             </span>
           )}
           {team && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+              className="inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] font-medium"
               style={{
-                backgroundColor: (team.color || "#8b5cf6") + "1a",
+                backgroundColor: (team.color || "#8b5cf6") + "14",
                 color: team.color || "#8b5cf6",
               }}
             >
-              <Users className="w-3 h-3" />
+              <Users aria-hidden="true" className="h-3 w-3" />
               {team.name}
             </span>
           )}
         </div>
       )}
-      {ticket.dueDate && (
-        <div className="flex items-center gap-1.5 text-xs text-slate-500">
-          <Calendar className="w-3 h-3" />
-          {new Date(ticket.dueDate).toLocaleDateString()}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium text-slate-500">
+          {ticket.projectPrefix}-{ticket.number}
+        </span>
+        <div className="flex items-center gap-2">
+          <PriorityBadge priority={ticket.priority} />
+          {ticket.dueDate && (
+            <span
+              title="Due date"
+              className="inline-flex items-center gap-1 text-[11px] text-slate-500"
+            >
+              <Calendar aria-hidden="true" className="h-3 w-3" />
+              {new Date(ticket.dueDate).toLocaleDateString()}
+            </span>
+          )}
+          <SubtaskProgress subtasks={ticket.subtasks} />
         </div>
-      )}
-      <SubtaskProgress subtasks={ticket.subtasks} />
+      </div>
     </div>
   );
 }
@@ -180,6 +195,8 @@ function Column({
   teams,
   onTicketClick,
   onAddTicket,
+  totalCount = tickets.length,
+  filtered = false,
 }: {
   status: string;
   tickets: Ticket[];
@@ -187,28 +204,38 @@ function Column({
   teams: Team[];
   onTicketClick: (ticket: Ticket) => void;
   onAddTicket: (status: string) => void;
+  totalCount?: number;
+  filtered?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const statusLabel = STATUS_LABELS[status];
+  const countLabel = filtered ? `${tickets.length}/${totalCount}` : `${totalCount}`;
 
   return (
-    <div className="flex flex-col w-80 shrink-0">
-      <div className="flex items-center gap-2 px-1 pb-3">
-        <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[status]}`} />
-        <h3 className="text-sm font-medium text-slate-300">
-          {STATUS_LABELS[status]}
+    <section
+      aria-label={`${statusLabel}, ${countLabel} tickets`}
+      className="flex min-w-56 flex-1 flex-col overflow-hidden rounded-md bg-slate-100"
+    >
+      <div className="flex items-center gap-1.5 px-3 py-2.5">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+          {statusLabel}
         </h3>
-        <span className="text-xs text-slate-600 ml-auto">{tickets.length}</span>
+        <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium leading-none text-slate-600">
+          {countLabel}
+        </span>
         <button
+          type="button"
+          aria-label={`Add ticket to ${statusLabel}`}
           onClick={() => onAddTicket(status)}
-          className="text-slate-600 hover:text-slate-300 transition-colors"
+          className="ml-auto rounded p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
-          <Plus className="w-4 h-4" />
+          <Plus aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
       <div
         ref={setNodeRef}
-        className={`flex-1 space-y-2 rounded-lg p-2 transition-colors min-h-32 ${
-          isOver ? "bg-blue-500/5 ring-1 ring-blue-500/20" : ""
+        className={`min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2 pb-2 transition-shadow ${
+          isOver ? "ring-2 ring-inset ring-blue-500" : ""
         }`}
       >
         {tickets.map((ticket) => (
@@ -221,12 +248,12 @@ function Column({
           />
         ))}
         {tickets.length === 0 && (
-          <div className="flex items-center justify-center h-24 text-xs text-slate-700 border border-dashed border-slate-800 rounded-lg">
+          <div className="flex h-24 items-center justify-center rounded-[5px] border border-dashed border-slate-300 text-xs text-slate-500">
             Drop tickets here
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
