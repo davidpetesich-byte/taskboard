@@ -19,9 +19,12 @@ clean:
 	rm -rf $(BUILD_DIR)/web
 	rm -rf web/dist web/node_modules
 
+# Copy then rename so a running daemon or MCP process keeps its old inode
+# instead of having a mapped, code-signed binary overwritten in place.
 install: build
 	mkdir -p $(HOME)/.local/bin
-	cp $(BINARY) $(HOME)/.local/bin/
+	cp $(BINARY) $(HOME)/.local/bin/$(BINARY).tmp
+	mv -f $(HOME)/.local/bin/$(BINARY).tmp $(HOME)/.local/bin/$(BINARY)
 
 dev-frontend:
 	cd web && npm run dev
