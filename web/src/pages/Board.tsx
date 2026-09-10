@@ -31,10 +31,10 @@ import LabelChip from "../components/LabelChip";
 import { STATUSES, STATUS_LABELS } from "../constants/statuses";
 
 const PRIORITY_CONFIG: Record<string, { color: string; icon: typeof ArrowUp }> = {
-  urgent: { color: "text-red-500", icon: AlertTriangle },
-  high: { color: "text-orange-500", icon: ArrowUp },
-  medium: { color: "text-yellow-500", icon: ArrowRight },
-  low: { color: "text-green-500", icon: ArrowDown },
+  urgent: { color: "text-red-600", icon: AlertTriangle },
+  high: { color: "text-orange-600", icon: ArrowUp },
+  medium: { color: "text-amber-600", icon: ArrowRight },
+  low: { color: "text-green-600", icon: ArrowDown },
 };
 
 function PriorityBadge({ priority }: { priority: string }) {
@@ -46,7 +46,7 @@ function PriorityBadge({ priority }: { priority: string }) {
       role="img"
       aria-label={`${priority} priority`}
       title={`${priority} priority`}
-      className={`inline-flex items-center ${config.color}`}
+      className={`inline-flex shrink-0 items-center ${config.color}`}
     >
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />
     </span>
@@ -60,7 +60,7 @@ function SubtaskProgress({ subtasks }: { subtasks: Ticket["subtasks"] }) {
   return (
     <div
       title={`${done} of ${subtasks.length} subtasks complete`}
-      className="flex items-center gap-1.5 text-[11px] text-slate-500"
+      className="flex shrink-0 items-center gap-1.5 text-[11px] text-slate-500"
     >
       <CheckCircle2 aria-hidden="true" className="h-3 w-3" />
       <div className="h-1 w-8 overflow-hidden rounded-full bg-slate-200">
@@ -115,40 +115,46 @@ function TicketCard({
         <div className="flex flex-wrap items-center gap-1.5">
           {project && (
             <span
-              className="inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] font-medium"
+              className="inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] font-medium text-slate-700"
               style={{
                 backgroundColor: (project.color || "#3b82f6") + "14",
-                color: project.color || "#3b82f6",
               }}
             >
-              <FolderKanban aria-hidden="true" className="h-3 w-3" />
+              <FolderKanban
+                aria-hidden="true"
+                className="h-3 w-3"
+                style={{ color: project.color || "#3b82f6" }}
+              />
               {project.name}
             </span>
           )}
           {team && (
             <span
-              className="inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] font-medium"
+              className="inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] font-medium text-slate-700"
               style={{
                 backgroundColor: (team.color || "#8b5cf6") + "14",
-                color: team.color || "#8b5cf6",
               }}
             >
-              <Users aria-hidden="true" className="h-3 w-3" />
+              <Users
+                aria-hidden="true"
+                className="h-3 w-3"
+                style={{ color: team.color || "#8b5cf6" }}
+              />
               {team.name}
             </span>
           )}
         </div>
       )}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium text-slate-500">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="shrink-0 text-[11px] font-medium text-slate-500">
           {ticket.projectPrefix}-{ticket.number}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <PriorityBadge priority={ticket.priority} />
           {ticket.dueDate && (
             <span
               title="Due date"
-              className="inline-flex items-center gap-1 text-[11px] text-slate-500"
+              className="inline-flex shrink-0 items-center gap-1 text-[11px] text-slate-500"
             >
               <Calendar aria-hidden="true" className="h-3 w-3" />
               {new Date(ticket.dueDate).toLocaleDateString()}
