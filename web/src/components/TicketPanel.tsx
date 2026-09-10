@@ -260,13 +260,16 @@ export default function TicketPanel({
       }
       try {
         const subtaskVersion = subtaskVersionRef.current;
+        const commentVersion = commentVersionRef.current;
         const fresh = await api.tickets.get(ticket.id);
-        const canAdoptSubtasks = subtaskVersionRef.current === subtaskVersion;
+        const canAdoptSide =
+          subtaskVersionRef.current === subtaskVersion && commentVersionRef.current === commentVersion;
         if (editVersionRef.current === editVersion) {
-          adoptTicket(fresh, canAdoptSubtasks);
+          adoptTicket(fresh, canAdoptSide);
         } else {
-          if (canAdoptSubtasks) {
+          if (canAdoptSide) {
             setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
+            setComments((prev) => (sameComments(prev, fresh.comments || []) ? prev : fresh.comments || []));
           }
           // A new local edit started while the save was settling. A response
           // matching the submitted fields is our own save and can be marked
