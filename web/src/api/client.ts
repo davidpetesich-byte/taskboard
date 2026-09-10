@@ -31,6 +31,15 @@ export interface Subtask {
   position: number;
 }
 
+export interface Comment {
+  id: string;
+  ticketId: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Ticket {
   id: string;
   projectId: string;
@@ -47,6 +56,7 @@ export interface Ticket {
   projectPrefix: string;
   labels: Label[];
   subtasks: Subtask[];
+  comments?: Comment[];
   blockedBy: string[];
 }
 
@@ -152,6 +162,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ title }),
       }),
+    addComment: (id: string, input: { author: string; body: string }) =>
+      request<Comment>(`/api/tickets/${id}/comments`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
   },
 
   subtasks: {
@@ -159,6 +174,10 @@ export const api = {
       request<Subtask>(`/api/subtasks/${id}/toggle`, { method: "POST" }),
     delete: (id: string) =>
       request<void>(`/api/subtasks/${id}`, { method: "DELETE" }),
+  },
+
+  comments: {
+    delete: (id: string) => request<void>(`/api/comments/${id}`, { method: "DELETE" }),
   },
 
   labels: {

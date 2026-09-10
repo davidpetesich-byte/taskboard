@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Trash2, CheckCircle2, Circle, Pencil, Eye } from "lucide-react";
+import { X, Trash2, CheckCircle2, Circle, Pencil, Eye, MessageSquare } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type Ticket, type TicketInput, type Project, type Team, type Subtask, type Label } from "../api/client";
+import {
+  api,
+  type Ticket,
+  type TicketInput,
+  type Project,
+  type Team,
+  type Subtask,
+  type Label,
+  type Comment,
+} from "../api/client";
 import { STATUSES, STATUS_LABELS } from "../constants/statuses";
 import LabelPicker from "./LabelPicker";
 
@@ -24,6 +33,19 @@ const toDateInput = (value?: string) => (value ? value.slice(0, 10) : "");
 const sameSubtasks = (a: Subtask[], b: Subtask[]) =>
   a.length === b.length &&
   a.every((s, i) => s.id === b[i].id && s.title === b[i].title && s.completed === b[i].completed);
+
+const sameComments = (a: Comment[], b: Comment[]) =>
+  a.length === b.length &&
+  a.every((c, i) => c.id === b[i].id && c.updatedAt === b[i].updatedAt && c.body === b[i].body);
+
+const AUTHOR_KEY = "taskboard.commentAuthor";
+const readAuthor = () => {
+  try {
+    return localStorage.getItem(AUTHOR_KEY) || "David";
+  } catch {
+    return "David";
+  }
+};
 
 const sameSavedFields = (fresh: Ticket, saved: TicketInput) => {
   const freshLabelIds = (fresh.labels || []).map((label) => label.id);
@@ -83,6 +105,11 @@ export default function TicketPanel({
   const [teamId, setTeamId] = useState(ticket.teamId || "");
   const [subtasks, setSubtasks] = useState<Subtask[]>(ticket.subtasks || []);
   const [newSubtask, setNewSubtask] = useState("");
+  const [comments, setComments] = useState<Comment[]>(ticket.comments || []);
+  const [commentAuthor, setCommentAuthor] = useState(readAuthor);
+  const [commentBody, setCommentBody] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [commentError, setCommentError] = useState("");
   const [dirty, setDirty] = useState(false);
   const [descMode, setDescMode] = useState<"view" | "edit">("view");
   const [labelIds, setLabelIds] = useState((ticket.labels || []).map((l) => l.id));
@@ -99,6 +126,7 @@ export default function TicketPanel({
   const editVersionRef = useRef(0);
   const pollingRef = useRef(false);
   const subtaskVersionRef = useRef(0);
+  const commentVersionRef = useRef(0);
   const lastSeenUpdatedAt = useRef(ticket.updatedAt);
 
   const project = projects.find((p) => p.id === ticket.projectId);
@@ -134,6 +162,7 @@ export default function TicketPanel({
     setAllLabels((prev) => mergeLabels(prev, fresh.labels || []));
     if (adoptSubtasks) {
       setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
+      setComments((prev) => (sameComments(prev, fresh.comments || []) ? prev : fresh.comments || []));
     }
     lastSeenUpdatedAt.current = fresh.updatedAt;
     editVersionRef.current += 1;
@@ -157,15 +186,22 @@ export default function TicketPanel({
       if (cancelled || savingRef.current || pollingRef.current || document.visibilityState === "hidden") return;
       pollingRef.current = true;
       const subtaskVersion = subtaskVersionRef.current;
+      const commentVersion = commentVersionRef.current;
       try {
         const fresh = await api.tickets.get(ticket.id);
         if (cancelled || savingRef.current || subtaskVersionRef.current !== subtaskVersion) return;
         setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
+        const canAdoptComments = commentVersionRef.current === commentVersion;
+        if (canAdoptComments) {
+          setComments((prev) => (sameComments(prev, fresh.comments || []) ? prev : fresh.comments || []));
+        }
         if (fresh.updatedAt === lastSeenUpdatedAt.current) return;
         if (dirtyRef.current) {
           setRemoteTicket(fresh);
         } else {
-          adoptTicket(fresh);
+          // Subtasks are already reconciled above; the flag only has to keep an
+          // in-flight comment mutation from being clobbered by this response.
+          adoptTicket(fresh, canAdoptComments);
         }
       } catch {
         return; // keep the last known state; try again next tick
@@ -282,6 +318,40 @@ export default function TicketPanel({
       setSubtasks((prev) => prev.filter((s) => s.id !== id));
     } finally {
       subtaskVersionRef.current += 1;
+    }
+  };
+
+  const handleAddComment = async () => {
+    const body = commentBody.trim();
+    if (!body || commentBusy) return;
+    const author = commentAuthor.trim() || "David";
+    try {
+      localStorage.setItem(AUTHOR_KEY, author);
+    } catch {
+      // storage unavailable; keep going
+    }
+    commentVersionRef.current += 1;
+    setCommentBusy(true);
+    setCommentError("");
+    try {
+      const created = await api.tickets.addComment(ticket.id, { author, body });
+      setComments((prev) => [...prev, created]);
+      setCommentBody("");
+    } catch {
+      setCommentError("Could not add comment. Please try again.");
+    } finally {
+      commentVersionRef.current += 1;
+      setCommentBusy(false);
+    }
+  };
+
+  const handleDeleteComment = async (id: string) => {
+    commentVersionRef.current += 1;
+    try {
+      await api.comments.delete(id);
+      setComments((prev) => prev.filter((c) => c.id !== id));
+    } finally {
+      commentVersionRef.current += 1;
     }
   };
 
@@ -408,6 +478,87 @@ export default function TicketPanel({
                   </button>
                 )}
               </div>
+
+              <section aria-labelledby="ticket-modal-comments-heading" className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <MessageSquare aria-hidden="true" className="h-4 w-4 text-slate-500" />
+                  <h3 id="ticket-modal-comments-heading" className="text-sm font-semibold text-slate-700">
+                    Comments
+                  </h3>
+                  <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium leading-none text-slate-600">
+                    {comments.length}
+                  </span>
+                </div>
+
+                {comments.length > 0 && (
+                  <ul className="space-y-2">
+                    {comments.map((c) => (
+                      <li key={c.id} className="group rounded-md border border-slate-200 bg-white px-4 py-3">
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-800">{c.author}</span>
+                          <time dateTime={c.createdAt} className="text-xs text-slate-500">
+                            {new Date(c.createdAt).toLocaleString()}
+                          </time>
+                          <button
+                            type="button"
+                            aria-label="Delete comment"
+                            onClick={() => handleDeleteComment(c.id)}
+                            className="ml-auto rounded p-1 text-slate-400 opacity-0 transition-all hover:bg-slate-100 hover:text-red-600 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          >
+                            <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="prose-doc">
+                          <Markdown remarkPlugins={[remarkGfm]}>{c.body}</Markdown>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <label htmlFor="ticket-modal-comment-author" className="text-xs font-medium text-slate-600">
+                      Comment as
+                    </label>
+                    <input
+                      id="ticket-modal-comment-author"
+                      value={commentAuthor}
+                      onChange={(e) => setCommentAuthor(e.target.value)}
+                      className="w-40 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <textarea
+                    value={commentBody}
+                    onChange={(e) => setCommentBody(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        handleAddComment();
+                      }
+                    }}
+                    placeholder="Add a comment (supports markdown)…"
+                    rows={3}
+                    className="w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleAddComment}
+                      disabled={commentBusy || !commentBody.trim()}
+                      className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                    >
+                      {commentBusy ? "Adding…" : "Add comment"}
+                    </button>
+                    <span className="text-xs text-slate-500">⌘↵ to submit</span>
+                    {commentError && (
+                      <p role="alert" className="text-xs text-red-600">
+                        {commentError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
             </div>
 
             <div className="space-y-4">
