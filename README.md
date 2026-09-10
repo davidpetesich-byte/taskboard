@@ -1,8 +1,9 @@
 # Taskboard
 
-> **Fork note (branch `dp/jira-columns-labels`):** this is a local fork of
-> [tcarac/taskboard](https://github.com/tcarac/taskboard) adding two board columns
-> (Backlog, In Review) and a working label UI. Design and rationale live in
+> **Fork note:** this repository is an independent fork, no longer tracking its
+> origin. It was forked from [tcarac/taskboard](https://github.com/tcarac/taskboard)
+> (MIT, see `LICENSE`) at v0.6.0 and adds two board columns (Backlog, In Review),
+> a working label UI, and subsequent local changes. Design and rationale live in
 > `docs/superpowers/specs/2026-09-09-columns-and-labels-design.md`.
 
 A local, self-hosted project management tool with a Kanban UI, full CLI, and a built-in [MCP](https://modelcontextprotocol.io/) server that lets AI assistants manage your projects, tickets, and teams directly.

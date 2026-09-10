@@ -7,7 +7,7 @@ Thanks for your interest in contributing! Here's how to get started.
 1. **Prerequisites**: Go 1.24+, Node.js 22+
 2. Clone the repo:
    ```bash
-   git clone https://github.com/tcarac/taskboard.git
+   git clone https://github.com/davidpetesich-byte/taskboard.git
    cd taskboard
    ```
 3. Build:
