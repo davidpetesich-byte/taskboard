@@ -7,6 +7,7 @@ import { STATUSES, STATUS_LABELS } from "../constants/statuses";
 import LabelPicker from "./LabelPicker";
 
 const PRIORITIES = ["urgent", "high", "medium", "low"];
+const POLL_MS = 3000;
 
 const mergeLabels = (current: Label[], incoming: Label[]) => {
   const seen = new Set<string>();
@@ -98,14 +99,6 @@ export default function TicketPanel({
     };
   }, []);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   // Replace every editable value with the server's version and mark the tree clean.
   const adoptTicket = useCallback((fresh: Ticket) => {
     setTitle(fresh.title);
@@ -124,6 +117,40 @@ export default function TicketPanel({
     setRemoteTicket(null);
     setSaveError("");
   }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled || savingRef.current || document.visibilityState === "hidden") return;
+      let fresh: Ticket;
+      try {
+        fresh = await api.tickets.get(ticket.id);
+      } catch {
+        return; // keep the last known state; try again next tick
+      }
+      if (cancelled || savingRef.current) return;
+      setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
+      if (fresh.updatedAt === lastSeenUpdatedAt.current) return;
+      if (dirtyRef.current) {
+        setRemoteTicket(fresh);
+      } else {
+        adoptTicket(fresh);
+      }
+    };
+    const id = window.setInterval(tick, POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [ticket.id, adoptTicket]);
 
   const handleCreateLabel = async (name: string, color: string) => {
     labelBusyRef.current = true;
