@@ -105,6 +105,7 @@ export default function TicketPanel({
   const [teamId, setTeamId] = useState(ticket.teamId || "");
   const [subtasks, setSubtasks] = useState<Subtask[]>(ticket.subtasks || []);
   const [newSubtask, setNewSubtask] = useState("");
+  const [subtaskError, setSubtaskError] = useState("");
   const [comments, setComments] = useState<Comment[]>(ticket.comments || []);
   const [commentAuthor, setCommentAuthor] = useState(readAuthor);
   const [commentBody, setCommentBody] = useState("");
@@ -298,10 +299,13 @@ export default function TicketPanel({
     e.preventDefault();
     if (!newSubtask.trim()) return;
     subtaskVersionRef.current += 1;
+    setSubtaskError("");
     try {
       const sub = await api.tickets.addSubtask(ticket.id, newSubtask);
       setSubtasks((prev) => [...prev, sub]);
       setNewSubtask("");
+    } catch {
+      setSubtaskError("Could not add subtask. Please try again.");
     } finally {
       subtaskVersionRef.current += 1;
     }
@@ -309,9 +313,12 @@ export default function TicketPanel({
 
   const handleToggleSubtask = async (id: string) => {
     subtaskVersionRef.current += 1;
+    setSubtaskError("");
     try {
       const updated = await api.subtasks.toggle(id);
       setSubtasks((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    } catch {
+      setSubtaskError("Could not update subtask. Please try again.");
     } finally {
       subtaskVersionRef.current += 1;
     }
@@ -319,9 +326,12 @@ export default function TicketPanel({
 
   const handleDeleteSubtask = async (id: string) => {
     subtaskVersionRef.current += 1;
+    setSubtaskError("");
     try {
       await api.subtasks.delete(id);
       setSubtasks((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      setSubtaskError("Could not delete subtask. Please try again.");
     } finally {
       subtaskVersionRef.current += 1;
     }
@@ -708,6 +718,11 @@ export default function TicketPanel({
                       Add
                     </button>
                   </form>
+                  {subtaskError && (
+                    <p role="alert" className="mt-1.5 px-2 text-xs text-red-600">
+                      {subtaskError}
+                    </p>
+                  )}
                 </div>
               </section>
             </div>
