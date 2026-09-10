@@ -209,6 +209,9 @@ export default function TicketPanel({
         pollingRef.current = false;
       }
     };
+    // Board and list payloads carry no comments, so fetch once on open
+    // instead of waiting a full interval for the first refresh.
+    void tick();
     const id = window.setInterval(tick, POLL_MS);
     return () => {
       cancelled = true;
