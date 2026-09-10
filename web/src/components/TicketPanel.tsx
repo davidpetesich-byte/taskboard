@@ -30,10 +30,16 @@ const fieldClass =
 const iconButtonClass =
   "rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500";
 
-function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+function DetailRow({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2 py-1.5">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="text-xs font-medium text-slate-600">
+          {label}
+        </label>
+      ) : (
+        <span className="text-xs font-medium text-slate-600">{label}</span>
+      )}
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -76,6 +82,8 @@ export default function TicketPanel({
   const savingRef = useRef(false);
   const dirtyRef = useRef(false);
   const editVersionRef = useRef(0);
+  const pollingRef = useRef(false);
+  const subtaskVersionRef = useRef(0);
   const lastSeenUpdatedAt = useRef(ticket.updatedAt);
 
   const project = projects.find((p) => p.id === ticket.projectId);
@@ -129,20 +137,23 @@ export default function TicketPanel({
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
-      if (cancelled || savingRef.current || document.visibilityState === "hidden") return;
-      let fresh: Ticket;
+      if (cancelled || savingRef.current || pollingRef.current || document.visibilityState === "hidden") return;
+      pollingRef.current = true;
+      const subtaskVersion = subtaskVersionRef.current;
       try {
-        fresh = await api.tickets.get(ticket.id);
+        const fresh = await api.tickets.get(ticket.id);
+        if (cancelled || savingRef.current || subtaskVersionRef.current !== subtaskVersion) return;
+        setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
+        if (fresh.updatedAt === lastSeenUpdatedAt.current) return;
+        if (dirtyRef.current) {
+          setRemoteTicket(fresh);
+        } else {
+          adoptTicket(fresh);
+        }
       } catch {
         return; // keep the last known state; try again next tick
-      }
-      if (cancelled || savingRef.current) return;
-      setSubtasks((prev) => (sameSubtasks(prev, fresh.subtasks || []) ? prev : fresh.subtasks || []));
-      if (fresh.updatedAt === lastSeenUpdatedAt.current) return;
-      if (dirtyRef.current) {
-        setRemoteTicket(fresh);
-      } else {
-        adoptTicket(fresh);
+      } finally {
+        pollingRef.current = false;
       }
     };
     const id = window.setInterval(tick, POLL_MS);
@@ -194,7 +205,6 @@ export default function TicketPanel({
         setRemoteTicket(null);
         try {
           const fresh = await api.tickets.get(ticket.id);
-          lastSeenUpdatedAt.current = fresh.updatedAt;
           if (editVersionRef.current === editVersion) adoptTicket(fresh);
         } catch {
           // Keep local values; the next poll will reconcile.
@@ -211,19 +221,34 @@ export default function TicketPanel({
   const handleAddSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubtask.trim()) return;
-    const sub = await api.tickets.addSubtask(ticket.id, newSubtask);
-    setSubtasks((prev) => [...prev, sub]);
-    setNewSubtask("");
+    subtaskVersionRef.current += 1;
+    try {
+      const sub = await api.tickets.addSubtask(ticket.id, newSubtask);
+      setSubtasks((prev) => [...prev, sub]);
+      setNewSubtask("");
+    } finally {
+      subtaskVersionRef.current += 1;
+    }
   };
 
   const handleToggleSubtask = async (id: string) => {
-    const updated = await api.subtasks.toggle(id);
-    setSubtasks((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    subtaskVersionRef.current += 1;
+    try {
+      const updated = await api.subtasks.toggle(id);
+      setSubtasks((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    } finally {
+      subtaskVersionRef.current += 1;
+    }
   };
 
   const handleDeleteSubtask = async (id: string) => {
-    await api.subtasks.delete(id);
-    setSubtasks((prev) => prev.filter((s) => s.id !== id));
+    subtaskVersionRef.current += 1;
+    try {
+      await api.subtasks.delete(id);
+      setSubtasks((prev) => prev.filter((s) => s.id !== id));
+    } finally {
+      subtaskVersionRef.current += 1;
+    }
   };
 
   return (
@@ -232,7 +257,7 @@ export default function TicketPanel({
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="ticket-modal-title"
+        aria-labelledby="ticket-modal-title-label"
         className="relative flex max-h-[90vh] w-[min(64rem,100vw-3rem)] flex-col overflow-hidden rounded-lg bg-white text-slate-900 shadow-[0_16px_48px_rgba(9,30,66,0.28)]"
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-6 py-3">
@@ -289,7 +314,7 @@ export default function TicketPanel({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid grid-cols-1 gap-6 p-6 min-[56rem]:grid-cols-[minmax(0,1fr)_20rem]">
             <div className="min-w-0 space-y-4">
-              <label htmlFor="ticket-modal-title" className="sr-only">
+              <label id="ticket-modal-title-label" htmlFor="ticket-modal-title" className="sr-only">
                 Title
               </label>
               <input
@@ -355,8 +380,9 @@ export default function TicketPanel({
               <section className="rounded-md border border-slate-200">
                 <h3 className="border-b border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700">Details</h3>
                 <div className="px-4 py-2">
-                  <DetailRow label="Status">
+                  <DetailRow label="Status" htmlFor="ticket-modal-status">
                     <select
+                      id="ticket-modal-status"
                       value={status}
                       onChange={(e) => {
                         setStatus(e.target.value);
@@ -371,8 +397,9 @@ export default function TicketPanel({
                       ))}
                     </select>
                   </DetailRow>
-                  <DetailRow label="Priority">
+                  <DetailRow label="Priority" htmlFor="ticket-modal-priority">
                     <select
+                      id="ticket-modal-priority"
                       value={priority}
                       onChange={(e) => {
                         setPriority(e.target.value);
@@ -387,8 +414,9 @@ export default function TicketPanel({
                       ))}
                     </select>
                   </DetailRow>
-                  <DetailRow label="Due date">
+                  <DetailRow label="Due date" htmlFor="ticket-modal-due-date">
                     <input
+                      id="ticket-modal-due-date"
                       type="date"
                       value={dueDate}
                       onChange={(e) => {
@@ -398,8 +426,9 @@ export default function TicketPanel({
                       className={fieldClass}
                     />
                   </DetailRow>
-                  <DetailRow label="Team">
+                  <DetailRow label="Team" htmlFor="ticket-modal-team">
                     <select
+                      id="ticket-modal-team"
                       value={teamId}
                       onChange={(e) => {
                         setTeamId(e.target.value);
