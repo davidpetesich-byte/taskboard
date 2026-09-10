@@ -102,3 +102,41 @@ func TestCommentEndpointsLifecycle(t *testing.T) {
 		t.Fatalf("second delete: want 404, got %d %s", res.StatusCode, body)
 	}
 }
+
+func TestUpdateTicketEndpointMovesTicketToAnotherProject(t *testing.T) {
+	ts, store := newTestAPI(t)
+	source, err := store.CreateProject(models.CreateProjectRequest{Name: "Source", Prefix: "SRC"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := store.CreateProject(models.CreateProjectRequest{Name: "Target", Prefix: "TGT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticket, err := store.CreateTicket(models.CreateTicketRequest{ProjectID: source.ID, Title: "Move me"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, body := do(t, http.MethodPut, ts.URL+"/api/tickets/"+ticket.ID,
+		`{"projectId":"`+target.ID+`"}`)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("PUT status = %d, body = %s; want 200", res.StatusCode, body)
+	}
+
+	var got models.Ticket
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if got.ProjectID != target.ID {
+		t.Errorf("response projectId = %q, want %q", got.ProjectID, target.ID)
+	}
+
+	stored, err := store.GetTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("re-reading ticket: %v", err)
+	}
+	if stored.ProjectID != target.ID {
+		t.Errorf("stored projectId = %q, want %q", stored.ProjectID, target.ID)
+	}
+}

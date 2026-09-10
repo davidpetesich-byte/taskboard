@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, X, FolderKanban, ChevronDown, ChevronUp } from "lucide-react";
 import Markdown from "react-markdown";
 import { api, type Project } from "../api/client";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const DEFAULT_COLORS = [
   "#3b82f6",
@@ -173,6 +174,10 @@ export default function Projects() {
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedDescs, setExpandedDescs] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
+  // null while the count is still loading, -1 if it could not be fetched.
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const toggleDesc = (id: string) => {
     setExpandedDescs((prev) => {
@@ -210,9 +215,40 @@ export default function Projects() {
     load();
   };
 
-  const handleDelete = async (id: string) => {
-    await api.projects.delete(id);
-    load();
+  // Deleting a project cascades to every ticket in it, so confirm against a live
+  // count rather than deleting straight from the card.
+  const askDelete = async (project: Project) => {
+    setPendingDelete(project);
+    setPendingCount(null);
+    try {
+      const tickets = await api.tickets.list();
+      setPendingCount((tickets || []).filter((t) => t.projectId === project.id).length);
+    } catch {
+      setPendingCount(-1);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await api.projects.delete(pendingDelete.id);
+      setPendingDelete(null);
+      load();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteMessage = () => {
+    if (pendingCount === null) return "Counting what this would delete…";
+    if (pendingCount < 0) {
+      return "This permanently deletes the project and every ticket in it, along with their comments and subtasks. This cannot be undone.";
+    }
+    if (pendingCount === 0) {
+      return "This project has no tickets. This cannot be undone.";
+    }
+    return `This permanently deletes ${pendingCount} ticket${pendingCount === 1 ? "" : "s"} and all their comments and subtasks. This cannot be undone.`;
   };
 
   return (
@@ -255,7 +291,7 @@ export default function Projects() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete(project.id);
+                      askDelete(project);
                     }}
                     className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all"
                   >
@@ -323,6 +359,21 @@ export default function Projects() {
           project={editProject}
           onClose={() => setEditProject(null)}
           onSave={handleUpdate}
+        />
+      )}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title={`Delete ${pendingDelete.name}?`}
+          message={deleteMessage()}
+          detail={
+            pendingCount !== null && pendingCount > 0
+              ? "Move any tickets you want to keep to another project first."
+              : undefined
+          }
+          busy={deleting}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </div>

@@ -313,6 +313,39 @@ var ErrTicketNotFound = errors.New("ticket not found")
 // case. Callers must not guess which ticket was intended.
 var ErrTicketReferenceAmbiguous = errors.New("ticket reference is ambiguous")
 
+// ErrProjectNotFound is returned by ResolveProjectID when neither an ID nor a
+// prefix matches a project.
+var ErrProjectNotFound = errors.New("project not found")
+
+// ResolveProjectID accepts a project ID or a project prefix (case-insensitive)
+// and returns the project ID. It mirrors ResolveTicketID so callers can refer to
+// a project the way they read it on a ticket key.
+func (s *Store) ResolveProjectID(ref string) (string, error) {
+	var id string
+	err := s.db.QueryRow("SELECT id FROM projects WHERE id = ?", ref).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", err
+	}
+
+	var matches int
+	err = s.db.QueryRow(
+		"SELECT COUNT(*), COALESCE(MIN(id), '') FROM projects WHERE UPPER(prefix) = UPPER(?)", ref,
+	).Scan(&matches, &id)
+	if err != nil {
+		return "", err
+	}
+	if matches == 0 {
+		return "", fmt.Errorf("%w: %q", ErrProjectNotFound, ref)
+	}
+	if matches > 1 {
+		return "", fmt.Errorf("project reference %q matches more than one project", ref)
+	}
+	return id, nil
+}
+
 // displayKeyRE splits a display key such as WEB-12 into prefix and number.
 // The prefix is everything before the last dash.
 var displayKeyRE = regexp.MustCompile(`^(.+)-(\d+)$`)
@@ -486,7 +519,6 @@ func (s *Store) updateTicket(id string, req models.UpdateTicketRequest, addLabel
 			args = append(args, parsed)
 		}
 	}
-	args = append(args, id)
 
 	// Only explicitly requested fields are written, so a partial update cannot
 	// clobber an unrelated field changed by another writer. Labels and blockers
@@ -497,8 +529,69 @@ func (s *Store) updateTicket(id string, req models.UpdateTicketRequest, addLabel
 	}
 	defer tx.Rollback()
 
+	// A move to another project must renumber: the schema enforces
+	// UNIQUE(project_id, number), and the ticket's current number may already be
+	// taken in the target. The new number and position are read inside the
+	// transaction so the move rolls back whole if anything below fails.
+	moving := false
+	if req.ProjectID != nil {
+		var currentProject, currentStatus string
+		err := tx.QueryRow("SELECT project_id, status FROM tickets WHERE id=?", id).Scan(&currentProject, &currentStatus)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if *req.ProjectID != currentProject {
+			var targetExists int
+			if err := tx.QueryRow("SELECT COUNT(*) FROM projects WHERE id=?", *req.ProjectID).Scan(&targetExists); err != nil {
+				return nil, err
+			}
+			if targetExists == 0 {
+				return nil, fmt.Errorf("target project %s not found", *req.ProjectID)
+			}
+
+			var number int
+			if err := tx.QueryRow(
+				"SELECT COALESCE(MAX(number), 0) + 1 FROM tickets WHERE project_id = ?", *req.ProjectID,
+			).Scan(&number); err != nil {
+				return nil, fmt.Errorf("finding next ticket number: %w", err)
+			}
+			setClauses = append(setClauses, "project_id=?", "number=?")
+			args = append(args, *req.ProjectID, number)
+
+			// The old position ordered the ticket against a different project's
+			// board, so re-place it at the bottom of the target column unless the
+			// caller asked for a specific position.
+			if req.Position == nil {
+				status := currentStatus
+				if req.Status != nil {
+					status = *req.Status
+				}
+				var position float64
+				if err := tx.QueryRow(
+					"SELECT COALESCE(MAX(position), 0) + 1000 FROM tickets WHERE project_id = ? AND status = ?",
+					*req.ProjectID, status,
+				).Scan(&position); err != nil {
+					return nil, fmt.Errorf("finding target board position: %w", err)
+				}
+				setClauses = append(setClauses, "position=?")
+				args = append(args, position)
+			}
+			moving = true
+		}
+	}
+
+	args = append(args, id)
+
 	result, err := tx.Exec("UPDATE tickets SET "+strings.Join(setClauses, ", ")+" WHERE id=?", args...)
 	if err != nil {
+		// Another writer can claim the number between our read and this write.
+		if moving && strings.Contains(err.Error(), "UNIQUE constraint") {
+			return nil, fmt.Errorf("target project changed while moving the ticket, please retry: %w", err)
+		}
 		return nil, err
 	}
 	affected, err := result.RowsAffected()

@@ -156,6 +156,7 @@ type CreateTicketRequest struct {
 }
 
 type UpdateTicketRequest struct {
+	ProjectID   *string  `json:"projectId,omitempty"`
 	TeamID      *string  `json:"teamId,omitempty"`
 	Title       *string  `json:"title,omitempty"`
 	Description *string  `json:"description,omitempty"`

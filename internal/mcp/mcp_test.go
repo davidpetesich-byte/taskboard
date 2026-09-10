@@ -128,3 +128,40 @@ func TestCreateTicketToolAttachesLabels(t *testing.T) {
 		t.Fatalf("want in_review with one label %s, got status=%s labels=%+v", label.ID, tk.Status, tk.Labels)
 	}
 }
+
+func TestUpdateTicketToolExposesProjectIDParam(t *testing.T) {
+	s, _ := newTestServer(t)
+	td := findTool(t, s, "update_ticket")
+	if _, ok := td.InputSchema.Properties["projectId"]; !ok {
+		t.Fatalf("update_ticket does not advertise a projectId property: %+v", td.InputSchema.Properties)
+	}
+}
+
+func TestUpdateTicketToolMovesTicketBetweenProjects(t *testing.T) {
+	s, store := newTestServer(t)
+	source, err := store.CreateProject(models.CreateProjectRequest{Name: "Source", Prefix: "SRC"})
+	if err != nil {
+		t.Fatalf("CreateProject source: %v", err)
+	}
+	target, err := store.CreateProject(models.CreateProjectRequest{Name: "Target", Prefix: "TGT"})
+	if err != nil {
+		t.Fatalf("CreateProject target: %v", err)
+	}
+	ticket, err := store.CreateTicket(models.CreateTicketRequest{ProjectID: source.ID, Title: "Move me"})
+	if err != nil {
+		t.Fatalf("CreateTicket: %v", err)
+	}
+
+	args := `{"id":"` + ticket.ID + `","projectId":"` + target.ID + `"}`
+	res, err := s.callTool("update_ticket", json.RawMessage(args))
+	if err != nil {
+		t.Fatalf("update_ticket: %v", err)
+	}
+	moved := res.(*models.Ticket)
+	if moved.ProjectID != target.ID {
+		t.Errorf("moved.ProjectID = %q, want %q", moved.ProjectID, target.ID)
+	}
+	if moved.ProjectPrefix != "TGT" {
+		t.Errorf("moved.ProjectPrefix = %q, want %q", moved.ProjectPrefix, "TGT")
+	}
+}

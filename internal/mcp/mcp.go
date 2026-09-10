@@ -572,6 +572,7 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 					"status":      {Type: "string", Description: "Status", Enum: db.BoardStatuses},
 					"priority":    {Type: "string", Description: "Priority", Enum: []string{"urgent", "high", "medium", "low"}},
 					"teamId":      {Type: "string", Description: "Team ID"},
+					"projectId":   {Type: "string", Description: "Move the ticket to this project ID. The ticket is renumbered in the target project, so its display key changes"},
 					"dueDate":     {Type: "string", Description: "Due date (YYYY-MM-DD)"},
 					"labels":      {Type: "array", Description: "Label IDs - replaces the ticket's full label set; pass [] to clear", Items: &jsonSchema{Type: "string"}},
 				},

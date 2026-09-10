@@ -57,6 +57,7 @@ const sameSavedFields = (fresh: Ticket, saved: TicketInput) => {
     fresh.priority === saved.priority &&
     toDateInput(fresh.dueDate) === (saved.dueDate || "") &&
     (fresh.teamId || "") === (saved.teamId || "") &&
+    (saved.projectId === undefined || fresh.projectId === saved.projectId) &&
     freshLabelIds.length === savedLabelIds.length &&
     freshLabelIds.every((id) => savedLabelIds.includes(id))
   );
@@ -103,6 +104,7 @@ export default function TicketPanel({
   const [priority, setPriority] = useState(ticket.priority);
   const [dueDate, setDueDate] = useState(toDateInput(ticket.dueDate));
   const [teamId, setTeamId] = useState(ticket.teamId || "");
+  const [projectId, setProjectId] = useState(ticket.projectId);
   const [subtasks, setSubtasks] = useState<Subtask[]>(ticket.subtasks || []);
   const [newSubtask, setNewSubtask] = useState("");
   const [subtaskError, setSubtaskError] = useState("");
@@ -129,8 +131,11 @@ export default function TicketPanel({
   const subtaskVersionRef = useRef(0);
   const commentVersionRef = useRef(0);
   const lastSeenUpdatedAt = useRef(ticket.updatedAt);
+  // Tracks the project the server last confirmed, so the move warning clears
+  // once a move is saved rather than waiting for the parent to pass a new prop.
+  const savedProjectRef = useRef(ticket.projectId);
 
-  const project = projects.find((p) => p.id === ticket.projectId);
+  const project = projects.find((p) => p.id === savedProjectRef.current);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,6 +164,8 @@ export default function TicketPanel({
     setPriority(fresh.priority);
     setDueDate(toDateInput(fresh.dueDate));
     setTeamId(fresh.teamId || "");
+    setProjectId(fresh.projectId);
+    savedProjectRef.current = fresh.projectId;
     setLabelIds((fresh.labels || []).map((l) => l.id));
     setAllLabels((prev) => mergeLabels(prev, fresh.labels || []));
     if (adoptSubtasks) {
@@ -254,6 +261,7 @@ export default function TicketPanel({
         priority,
         dueDate: dueDate || undefined,
         teamId: teamId || undefined,
+        projectId,
         labels: labelIds,
       };
       await onUpdate(ticket.id, savedInput);
@@ -648,8 +656,28 @@ export default function TicketPanel({
                       ))}
                     </select>
                   </DetailRow>
-                  <DetailRow label="Project">
-                    <span className="text-sm text-slate-800">{project?.name || "—"}</span>
+                  <DetailRow label="Project" htmlFor="ticket-modal-project">
+                    <select
+                      id="ticket-modal-project"
+                      value={projectId}
+                      onChange={(e) => {
+                        setProjectId(e.target.value);
+                        markDirty();
+                      }}
+                      className={fieldClass}
+                    >
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    {projectId !== savedProjectRef.current && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Saving moves this ticket out of {project?.name || "its project"} and gives it a new
+                        key in the target project.
+                      </p>
+                    )}
                   </DetailRow>
                   <div className="py-1.5">
                     <span className="mb-1.5 block text-xs font-medium text-slate-600">Labels</span>

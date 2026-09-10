@@ -217,6 +217,7 @@ func ticketCommands() *cobra.Command {
 	}
 
 	var upTitle, upDesc, upDescFile, upStatus, upPriority, upDue, upTeam string
+	var upProject string
 	var upLabels, upAddLabels, upRemoveLabels []string
 	var upClearLabels bool
 	updateCmd := &cobra.Command{
@@ -225,7 +226,7 @@ func ticketCommands() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			changed := false
-			for _, name := range []string{"title", "description", "description-file", "status", "priority", "due", "team", "label", "add-label", "remove-label", "clear-labels"} {
+			for _, name := range []string{"title", "description", "description-file", "status", "priority", "due", "team", "project", "label", "add-label", "remove-label", "clear-labels"} {
 				if cmd.Flags().Changed(name) {
 					changed = true
 					break
@@ -277,6 +278,13 @@ func ticketCommands() *cobra.Command {
 			}
 			if cmd.Flags().Changed("team") {
 				req.TeamID = &upTeam
+			}
+			if cmd.Flags().Changed("project") {
+				targetID, err := store.ResolveProjectID(upProject)
+				if err != nil {
+					return err
+				}
+				req.ProjectID = &targetID
 			}
 			req.Description = desc
 
@@ -330,6 +338,7 @@ func ticketCommands() *cobra.Command {
 	updateCmd.Flags().StringVar(&upPriority, "priority", "", "new priority (urgent|high|medium|low)")
 	updateCmd.Flags().StringVar(&upDue, "due", "", "new due date (YYYY-MM-DD)")
 	updateCmd.Flags().StringVar(&upTeam, "team", "", "new team ID")
+	updateCmd.Flags().StringVar(&upProject, "project", "", "move the ticket to another project (ID or prefix); the ticket is renumbered in the target project")
 	updateCmd.Flags().StringArrayVar(&upLabels, "label", nil, "replace the label set with these (ID or name); repeatable")
 	updateCmd.Flags().StringArrayVar(&upAddLabels, "add-label", nil, "add a label (ID or name); repeatable")
 	updateCmd.Flags().StringArrayVar(&upRemoveLabels, "remove-label", nil, "remove a label (ID or name); repeatable")
