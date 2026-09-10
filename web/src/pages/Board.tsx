@@ -375,6 +375,11 @@ export default function Board() {
 
   const clearActiveDrag = () => setActiveTicket(null);
 
+  const handleDragCancel = () => {
+    clearActiveDrag();
+    loadBoard();
+  };
+
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -405,13 +410,19 @@ export default function Board() {
     clearActiveDrag();
     const { active, over } = event;
 
-    if (!over) return;
+    if (!over) {
+      loadBoard();
+      return;
+    }
 
     const targetStatus = STATUSES.includes(over.id as string)
       ? (over.id as string)
       : findColumnByTicketId(over.id);
 
-    if (!targetStatus) return;
+    if (!targetStatus) {
+      loadBoard();
+      return;
+    }
 
     try {
       await api.tickets.move(active.id as string, targetStatus);
@@ -505,7 +516,7 @@ export default function Board() {
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
-            onDragCancel={clearActiveDrag}
+            onDragCancel={handleDragCancel}
           >
             <div className="flex h-full min-w-[72rem] gap-2">
               {STATUSES.map((status) => (
