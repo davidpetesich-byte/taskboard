@@ -270,7 +270,6 @@ export default function Board() {
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [columns, setColumns] = useState<BoardColumn[]>([]);
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
-  const [activeTicketWidth, setActiveTicketWidth] = useState<number | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [createForStatus, setCreateForStatus] = useState<string | null>(null);
   const [filterLabelId, setFilterLabelId] = useState<string | null>(null);
@@ -372,13 +371,9 @@ export default function Board() {
   const handleDragStart = (event: DragStartEvent) => {
     const ticket = findTicketById(event.active.id);
     setActiveTicket(ticket ?? null);
-    setActiveTicketWidth(event.active.rect.current.initial?.width ?? null);
   };
 
-  const clearActiveDrag = () => {
-    setActiveTicket(null);
-    setActiveTicketWidth(null);
-  };
+  const clearActiveDrag = () => setActiveTicket(null);
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
@@ -529,13 +524,7 @@ export default function Board() {
             </div>
             <DragOverlay>
               {activeTicket ? (
-                <div
-                  style={{
-                    width: activeTicketWidth ?? undefined,
-                  }}
-                >
-                  <TicketCard ticket={activeTicket} projects={projects} teams={teams} isDragging />
-                </div>
+                <TicketCard ticket={activeTicket} projects={projects} teams={teams} isDragging />
               ) : null}
             </DragOverlay>
            </DndContext>
