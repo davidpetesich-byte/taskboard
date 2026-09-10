@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -190,6 +191,59 @@ func TestCreateTicketWithUnknownLabelReturnsError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("creating ticket with an unknown label returned nil error")
+	}
+}
+
+func TestCreateTicketPersistsInitialSubtasksInOrder(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+
+	var req models.CreateTicketRequest
+	payload := `{"projectId":"` + project.ID + `","title":"Parent","subtasks":["First step","Second step"]}`
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		t.Fatalf("decoding create request: %v", err)
+	}
+
+	ticket, err := s.CreateTicket(req)
+	if err != nil {
+		t.Fatalf("creating ticket with subtasks: %v", err)
+	}
+	got := make([]string, len(ticket.Subtasks))
+	for i, subtask := range ticket.Subtasks {
+		got[i] = subtask.Title
+	}
+	want := []string{"First step", "Second step"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("subtasks = %v, want %v", got, want)
+	}
+}
+
+func TestCreateTicketRollsBackWhenInitialSubtaskFails(t *testing.T) {
+	s := newTestStore(t)
+	project := newTestProject(t, s)
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_failed_subtask
+		BEFORE INSERT ON subtasks WHEN NEW.title = 'fail'
+		BEGIN SELECT RAISE(ABORT, 'subtask insert failed'); END`); err != nil {
+		t.Fatalf("creating subtask failure trigger: %v", err)
+	}
+
+	var req models.CreateTicketRequest
+	payload := `{"projectId":"` + project.ID + `","title":"Parent","subtasks":["ok","fail"]}`
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		t.Fatalf("decoding create request: %v", err)
+	}
+	if _, err := s.CreateTicket(req); err == nil {
+		t.Fatal("creating ticket returned nil error, want subtask insert failure")
+	}
+
+	for _, table := range []string{"tickets", "subtasks"} {
+		var count int
+		if err := s.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
+			t.Fatalf("counting %s: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("%s rows after failed create = %d, want 0", table, count)
+		}
 	}
 }
 

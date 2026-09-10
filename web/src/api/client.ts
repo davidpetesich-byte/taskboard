@@ -65,6 +65,10 @@ export interface TicketInput {
   blockedBy?: string[];
 }
 
+export interface CreateTicketInput extends TicketInput {
+  subtasks?: string[];
+}
+
 export interface BoardColumn {
   status: string;
   tickets: Ticket[];
@@ -126,7 +130,7 @@ export const api = {
   tickets: {
     list: () => request<Ticket[]>("/api/tickets"),
     get: (id: string) => request<Ticket>(`/api/tickets/${id}`),
-    create: (data: TicketInput) =>
+    create: (data: CreateTicketInput) =>
       request<Ticket>("/api/tickets", {
         method: "POST",
         body: JSON.stringify(data),

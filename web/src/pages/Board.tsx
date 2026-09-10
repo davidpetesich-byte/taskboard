@@ -24,7 +24,7 @@ import {
   Users,
   Plus,
 } from "lucide-react";
-import { api, type Ticket, type TicketInput, type Project, type Team, type BoardColumn, type Label } from "../api/client";
+import { api, type Ticket, type TicketInput, type CreateTicketInput, type Project, type Team, type BoardColumn, type Label } from "../api/client";
 import TicketPanel from "../components/TicketPanel";
 import CreateTicketModal from "../components/CreateTicketModal";
 import LabelChip from "../components/LabelChip";
@@ -445,7 +445,7 @@ export default function Board() {
     loadBoard();
   };
 
-  const handleCreate = async (data: TicketInput) => {
+  const handleCreate = async (data: CreateTicketInput) => {
     await api.tickets.create(data);
     setCreateForStatus(null);
     loadBoard();

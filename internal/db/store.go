@@ -420,6 +420,15 @@ func (s *Store) CreateTicket(req models.CreateTicketRequest) (*models.Ticket, er
 		}
 	}
 
+	for position, title := range req.Subtasks {
+		if _, err := tx.Exec(
+			"INSERT INTO subtasks (id, ticket_id, title, completed, position) VALUES (?, ?, ?, ?, ?)",
+			newID(), t.ID, title, false, position,
+		); err != nil {
+			return nil, fmt.Errorf("adding initial subtask: %w", err)
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

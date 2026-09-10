@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
-import { api, type TicketInput, type Project, type Team, type Label } from "../api/client";
+import { Circle, X } from "lucide-react";
+import { api, type CreateTicketInput, type Project, type Team, type Label } from "../api/client";
 import LabelPicker from "./LabelPicker";
 
 const PRIORITIES = ["urgent", "high", "medium", "low"];
@@ -25,7 +25,7 @@ export default function CreateTicketModal({
   teams: Team[];
   defaultStatus?: string;
   onClose: () => void;
-  onCreate: (data: TicketInput) => Promise<void>;
+  onCreate: (data: CreateTicketInput) => Promise<void>;
 }) {
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [title, setTitle] = useState("");
@@ -34,6 +34,8 @@ export default function CreateTicketModal({
   const [dueDate, setDueDate] = useState("");
   const [teamId, setTeamId] = useState("");
   const [labelIds, setLabelIds] = useState<string[]>([]);
+  const [subtasks, setSubtasks] = useState<string[]>([]);
+  const [newSubtask, setNewSubtask] = useState("");
   const [allLabels, setAllLabels] = useState<Label[]>([]);
   const [labelsLoading, setLabelsLoading] = useState(true);
   const [labelsError, setLabelsError] = useState("");
@@ -75,6 +77,13 @@ export default function CreateTicketModal({
     }
   };
 
+  const addSubtask = () => {
+    const title = newSubtask.trim();
+    if (!title) return;
+    setSubtasks((current) => [...current, title]);
+    setNewSubtask("");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !projectId || labelBusyRef.current || ticketSavingRef.current) return;
@@ -82,6 +91,7 @@ export default function CreateTicketModal({
     setTicketSaving(true);
     setTicketError("");
     try {
+      const pendingSubtask = newSubtask.trim();
       await onCreate({
         projectId,
         title,
@@ -91,6 +101,7 @@ export default function CreateTicketModal({
         dueDate: dueDate || undefined,
         teamId: teamId || undefined,
         labels: labelIds,
+        subtasks: pendingSubtask ? [...subtasks, pendingSubtask] : subtasks,
       });
     } catch {
       setTicketError("Could not create ticket. Please try again.");
@@ -104,7 +115,7 @@ export default function CreateTicketModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-6">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-lg rounded-lg bg-white p-6 space-y-5 text-slate-900 shadow-[0_16px_48px_rgba(9,30,66,0.28)]"
+        className="max-h-[90vh] w-full max-w-lg space-y-5 overflow-y-auto rounded-lg bg-white p-6 text-slate-900 shadow-[0_16px_48px_rgba(9,30,66,0.28)]"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">New Ticket</h2>
@@ -229,6 +240,52 @@ export default function CreateTicketModal({
                 {labelsError}
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-600">
+              Subtasks
+            </label>
+            {subtasks.length > 0 && (
+              <div className="mb-2 divide-y divide-slate-200 rounded-md border border-slate-200 bg-slate-50">
+                {subtasks.map((subtask, index) => (
+                  <div key={`${subtask}-${index}`} className="flex items-center gap-2 px-2.5 py-2 text-sm text-slate-700">
+                    <Circle className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 break-words">{subtask}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove subtask ${subtask}`}
+                      onClick={() => setSubtasks((current) => current.filter((_, candidate) => candidate !== index))}
+                      className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                value={newSubtask}
+                onChange={(event) => setNewSubtask(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  addSubtask();
+                }}
+                aria-label="New subtask"
+                placeholder="Add a subtask…"
+                className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={addSubtask}
+                disabled={!newSubtask.trim()}
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
           </div>
         </div>
 

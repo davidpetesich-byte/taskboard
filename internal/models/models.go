@@ -137,6 +137,7 @@ type CreateTicketRequest struct {
 	DueDate     *string  `json:"dueDate,omitempty"`
 	Labels      []string `json:"labels,omitempty"`
 	BlockedBy   []string `json:"blockedBy,omitempty"`
+	Subtasks    []string `json:"subtasks,omitempty"`
 }
 
 type UpdateTicketRequest struct {
