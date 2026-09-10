@@ -41,7 +41,7 @@ export default function LabelChip({
       {isBoard && (
         <span
           aria-hidden="true"
-          className="h-2.5 w-2.5 rounded-[2px]"
+          className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
           style={{ backgroundColor: color }}
         />
       )}
