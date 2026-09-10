@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tcarac/taskboard/internal/db"
@@ -78,7 +79,10 @@ func commentCommands() *cobra.Command {
 					fmt.Fprintln(w, "No comments.")
 					return
 				}
-				for _, c := range comments {
+				for i, c := range comments {
+					if i > 0 {
+						fmt.Fprintln(w)
+					}
 					fmt.Fprintf(w, "--- %s · %s (%s)\n%s\n", c.Author, c.CreatedAt.Format("2006-01-02T15:04:05Z07:00"), c.ID, c.Body)
 				}
 			})
@@ -117,21 +121,24 @@ func commentBody(cmd *cobra.Command, args []string, bodyFile string) (string, er
 	if hasInline == (bodyFile != "") {
 		return "", fmt.Errorf("provide the body as an argument or with --body-file, not both")
 	}
+	var body string
 	if hasInline {
-		return args[1], nil
-	}
-	var data []byte
-	var err error
-	if bodyFile == "-" {
-		data, err = io.ReadAll(cmd.InOrStdin())
+		body = args[1]
 	} else {
-		data, err = os.ReadFile(bodyFile)
+		var data []byte
+		var err error
+		if bodyFile == "-" {
+			data, err = io.ReadAll(cmd.InOrStdin())
+		} else {
+			data, err = os.ReadFile(bodyFile)
+		}
+		if err != nil {
+			return "", fmt.Errorf("reading body file: %w", err)
+		}
+		body = string(data)
 	}
-	if err != nil {
-		return "", fmt.Errorf("reading body file: %w", err)
-	}
-	if len(data) == 0 {
+	if strings.TrimSpace(body) == "" {
 		return "", fmt.Errorf("comment body is empty")
 	}
-	return string(data), nil
+	return body, nil
 }

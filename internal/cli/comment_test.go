@@ -60,6 +60,13 @@ func TestCommentAddRequiresExactlyOneBodySource(t *testing.T) {
 	if _, err := e.run("comment", "add", "SMK-1", "inline", "--body-file", "-"); err == nil {
 		t.Fatal("expected error with both body sources")
 	}
+	if _, err := e.run("comment", "add", "SMK-1", "   "); err == nil || !strings.Contains(err.Error(), "comment body is empty") {
+		t.Fatalf("expected blank inline body to be rejected, got %v", err)
+	}
+	e.stdin = "\n\t\n"
+	if _, err := e.run("comment", "add", "SMK-1", "--body-file", "-"); err == nil || !strings.Contains(err.Error(), "comment body is empty") {
+		t.Fatalf("expected blank stdin body to be rejected, got %v", err)
+	}
 	e.stdin = ""
 
 	// Neither rejection may have written a comment.
