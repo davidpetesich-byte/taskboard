@@ -39,6 +39,7 @@ type Ticket struct {
 	ProjectPrefix string    `json:"projectPrefix,omitempty"`
 	Labels        []Label   `json:"labels,omitempty"`
 	Subtasks      []Subtask `json:"subtasks,omitempty"`
+	Comments      []Comment `json:"comments,omitempty"`
 	BlockedBy     []string  `json:"blockedBy,omitempty"`
 }
 
@@ -82,6 +83,20 @@ type Subtask struct {
 	Title     string `json:"title"`
 	Completed bool   `json:"completed"`
 	Position  int    `json:"position"`
+}
+
+type Comment struct {
+	ID        string    `json:"id"`
+	TicketID  string    `json:"ticketId"`
+	Author    string    `json:"author"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type CreateCommentRequest struct {
+	Author string `json:"author"`
+	Body   string `json:"body"`
 }
 
 type TicketDependency struct {

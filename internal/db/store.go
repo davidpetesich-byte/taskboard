@@ -299,6 +299,7 @@ func (s *Store) GetTicket(id string) (*models.Ticket, error) {
 	t.Labels, _ = s.getTicketLabels(t.ID)
 	t.Subtasks, _ = s.getTicketSubtasks(t.ID)
 	t.BlockedBy, _ = s.getTicketBlockedBy(t.ID)
+	t.Comments, _ = s.getTicketComments(t.ID)
 
 	return &t, nil
 }
@@ -734,6 +735,84 @@ func (s *Store) GetSubtask(id string) (*models.Subtask, error) {
 func (s *Store) DeleteSubtask(id string) error {
 	_, err := s.db.Exec("DELETE FROM subtasks WHERE id = ?", id)
 	return err
+}
+
+// AddComment appends a comment to a ticket. It returns ErrTicketNotFound when
+// the ticket does not exist so callers can map it to a 404.
+func (s *Store) AddComment(ticketID string, req models.CreateCommentRequest) (*models.Comment, error) {
+	var exists int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM tickets WHERE id = ?", ticketID).Scan(&exists); err != nil {
+		return nil, err
+	}
+	if exists == 0 {
+		return nil, ErrTicketNotFound
+	}
+	author := req.Author
+	if author == "" {
+		author = "unknown"
+	}
+	id := newID()
+	// SQLite's CURRENT_TIMESTAMP default has only second resolution, which
+	// collides when several comments are added within the same second (as
+	// happens in tests and in quick successive CLI/MCP calls) and breaks the
+	// "ORDER BY created_at, id" ordering in getTicketComments, since ULIDs
+	// generated in the same millisecond are not guaranteed to sort in
+	// creation order. Setting created_at/updated_at explicitly from Go's
+	// higher-resolution clock, the same way CreateProject and CreateTicket
+	// already do, keeps insertion order stable.
+	now := time.Now()
+	if _, err := s.db.Exec(
+		"INSERT INTO comments (id, ticket_id, author, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		id, ticketID, author, req.Body, now, now,
+	); err != nil {
+		return nil, err
+	}
+	return s.GetComment(id)
+}
+
+// GetComment returns a comment by ID, or nil, nil when none exists.
+func (s *Store) GetComment(id string) (*models.Comment, error) {
+	var c models.Comment
+	err := s.db.QueryRow("SELECT id, ticket_id, author, body, created_at, updated_at FROM comments WHERE id = ?", id).
+		Scan(&c.ID, &c.TicketID, &c.Author, &c.Body, &c.CreatedAt, &c.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// DeleteComment removes a comment; sql.ErrNoRows when nothing matched.
+func (s *Store) DeleteComment(id string) error {
+	res, err := s.db.Exec("DELETE FROM comments WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) getTicketComments(ticketID string) ([]models.Comment, error) {
+	rows, err := s.db.Query(
+		"SELECT id, ticket_id, author, body, created_at, updated_at FROM comments WHERE ticket_id = ? ORDER BY created_at, id",
+		ticketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var comments []models.Comment
+	for rows.Next() {
+		var c models.Comment
+		if err := rows.Scan(&c.ID, &c.TicketID, &c.Author, &c.Body, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, err
+		}
+		comments = append(comments, c)
+	}
+	return comments, rows.Err()
 }
 
 func (s *Store) getTicketLabels(ticketID string) ([]models.Label, error) {
