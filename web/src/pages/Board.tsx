@@ -270,6 +270,7 @@ export default function Board() {
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [columns, setColumns] = useState<BoardColumn[]>([]);
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
+  const [activeTicketWidth, setActiveTicketWidth] = useState<number | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [createForStatus, setCreateForStatus] = useState<string | null>(null);
   const [filterLabelId, setFilterLabelId] = useState<string | null>(null);
@@ -350,6 +351,9 @@ export default function Board() {
     );
   };
 
+  const getColumnTotal = (status: string) =>
+    columns.find((column) => column.status === status)?.tickets.length ?? 0;
+
   const findTicketById = (id: UniqueIdentifier): Ticket | undefined => {
     for (const col of columns) {
       const found = col.tickets.find((t) => t.id === id);
@@ -368,6 +372,12 @@ export default function Board() {
   const handleDragStart = (event: DragStartEvent) => {
     const ticket = findTicketById(event.active.id);
     setActiveTicket(ticket ?? null);
+    setActiveTicketWidth(event.active.rect.current.initial?.width ?? null);
+  };
+
+  const clearActiveDrag = () => {
+    setActiveTicket(null);
+    setActiveTicketWidth(null);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -397,8 +407,8 @@ export default function Board() {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    clearActiveDrag();
     const { active, over } = event;
-    setActiveTicket(null);
 
     if (!over) return;
 
@@ -436,13 +446,13 @@ export default function Board() {
   };
 
   return (
-    <div className="h-full flex flex-col">
-      <header className="shrink-0 flex items-center justify-between px-6 h-14 border-b border-slate-800">
-        <h1 className="text-lg font-semibold text-white">Board</h1>
+    <div className="flex h-full min-h-0 flex-col bg-slate-50 text-slate-900">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5">
+        <h1 className="text-lg font-semibold text-slate-900">Board</h1>
         <select
           value={selectedProject}
           onChange={(e) => setSelectedProject(e.target.value)}
-          className="bg-slate-800 text-sm text-slate-300 rounded-md border border-slate-700 px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All Projects</option>
           {projects.map((p) => (
@@ -457,15 +467,16 @@ export default function Board() {
         <div
           role="group"
           aria-labelledby="board-label-filter-label"
-          className="shrink-0 flex flex-wrap items-center gap-2 px-6 py-2 border-b border-slate-800/50"
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-5 py-2"
         >
-          <span id="board-label-filter-label" className="text-xs text-slate-500">
+          <span id="board-label-filter-label" className="text-xs text-slate-600">
             Filter by label:
           </span>
           {labelsInPlay.map((label) => (
             <LabelChip
               key={label.id}
               label={label}
+              variant="board"
               active={effectiveFilterLabelId === label.id}
               onClick={() =>
                 setFilterLabelId((current) =>
@@ -479,7 +490,7 @@ export default function Board() {
               type="button"
               aria-label="Clear label filter"
               onClick={() => setFilterLabelId(null)}
-              className="text-xs text-slate-400 hover:text-white transition-colors"
+              className="rounded px-1.5 py-0.5 text-xs text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               Clear
             </button>
@@ -487,9 +498,9 @@ export default function Board() {
         </div>
       )}
 
-      <div className="flex-1 overflow-x-auto p-6">
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden bg-slate-50 p-3">
         {loading ? (
-          <div className="flex items-center justify-center h-full text-slate-600">
+          <div className="flex h-full items-center justify-center text-slate-500">
             Loading board…
           </div>
         ) : (
@@ -499,13 +510,16 @@ export default function Board() {
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
+            onDragCancel={clearActiveDrag}
           >
-            <div className="flex gap-6 h-full">
+            <div className="flex h-full min-w-[72rem] gap-2">
               {STATUSES.map((status) => (
                 <Column
                   key={status}
                   status={status}
                   tickets={getColumnTickets(status)}
+                  totalCount={getColumnTotal(status)}
+                  filtered={effectiveFilterLabelId !== null}
                   projects={projects}
                   teams={teams}
                   onTicketClick={handleTicketClick}
@@ -515,7 +529,11 @@ export default function Board() {
             </div>
             <DragOverlay>
               {activeTicket ? (
-                <div className="w-80">
+                <div
+                  style={{
+                    width: activeTicketWidth ?? undefined,
+                  }}
+                >
                   <TicketCard ticket={activeTicket} projects={projects} teams={teams} isDragging />
                 </div>
               ) : null}
