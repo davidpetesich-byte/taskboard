@@ -203,12 +203,15 @@ export default function TicketPanel({
         dirtyRef.current = false;
         setDirty(false);
         setRemoteTicket(null);
-        try {
-          const fresh = await api.tickets.get(ticket.id);
-          if (editVersionRef.current === editVersion) adoptTicket(fresh);
-        } catch {
-          // Keep local values; the next poll will reconcile.
-        }
+      }
+      try {
+        const fresh = await api.tickets.get(ticket.id);
+        // Our own save is not a remote change: mark it seen even if the user
+        // has already started editing again, so the next poll stays quiet.
+        lastSeenUpdatedAt.current = fresh.updatedAt;
+        if (editVersionRef.current === editVersion) adoptTicket(fresh);
+      } catch {
+        // Keep local values; the next poll will reconcile.
       }
     } catch {
       setSaveError("Could not save changes. Please try again.");
