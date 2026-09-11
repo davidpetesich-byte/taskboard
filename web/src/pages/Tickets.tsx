@@ -13,6 +13,7 @@ import { api, type Ticket, type TicketInput, type CreateTicketInput, type Projec
 import TicketPanel from "../components/TicketPanel";
 import CreateTicketModal from "../components/CreateTicketModal";
 import { STATUSES, STATUS_LABELS, STATUS_STYLES } from "../constants/statuses";
+import { formatDueDate } from "../lib/dates";
 
 const PRIORITIES = ["urgent", "high", "medium", "low"];
 
@@ -210,7 +211,7 @@ export default function Tickets() {
                     {ticket.dueDate ? (
                       <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                         <Calendar className="w-3 h-3" />
-                        {new Date(ticket.dueDate).toLocaleDateString()}
+                        {formatDueDate(ticket.dueDate)}
                       </span>
                     ) : (
                       <span className="text-xs text-slate-700">—</span>

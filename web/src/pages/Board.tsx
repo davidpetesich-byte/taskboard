@@ -29,6 +29,7 @@ import TicketPanel from "../components/TicketPanel";
 import CreateTicketModal from "../components/CreateTicketModal";
 import LabelChip from "../components/LabelChip";
 import { STATUSES, STATUS_LABELS } from "../constants/statuses";
+import { formatDueDate } from "../lib/dates";
 
 const PRIORITY_CONFIG: Record<string, { color: string; icon: typeof ArrowUp }> = {
   urgent: { color: "text-red-600", icon: AlertTriangle },
@@ -157,7 +158,7 @@ function TicketCard({
               className="inline-flex shrink-0 items-center gap-1 text-[11px] text-slate-500"
             >
               <Calendar aria-hidden="true" className="h-3 w-3" />
-              {new Date(ticket.dueDate).toLocaleDateString()}
+              {formatDueDate(ticket.dueDate)}
             </span>
           )}
           <SubtaskProgress subtasks={ticket.subtasks} />
