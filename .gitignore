@@ -31,3 +31,8 @@ Thumbs.db
 .worktrees/
 # Superpowers SDD scratch
 .superpowers/
+
+# Local planning docs (Superpowers specs/plans)
+docs/superpowers/
+# Local backups of the live binary/database
+Backups/
