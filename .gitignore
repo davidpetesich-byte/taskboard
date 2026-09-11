@@ -36,3 +36,5 @@ Thumbs.db
 docs/superpowers/
 # Local backups of the live binary/database
 Backups/
+# Local working notes (plans, lessons)
+tasks/
