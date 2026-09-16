@@ -102,7 +102,7 @@ function TicketCard({
           : "border-slate-300 shadow-[0_1px_1px_rgba(9,30,66,0.12)] hover:border-blue-400 hover:shadow-[0_2px_4px_rgba(9,30,66,0.16)]"
       }`}
     >
-      <p className="text-[13px] font-medium leading-[1.35] text-slate-800">
+      <p className="text-[14px] font-medium leading-[1.35] text-slate-800">
         {ticket.title}
       </p>
       {ticket.labels && ticket.labels.length > 0 && (
@@ -454,7 +454,7 @@ export default function Board() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-50 text-slate-900">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5">
+      <header className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5">
         <h1 className="text-lg font-semibold text-slate-900">Board</h1>
         <select
           value={selectedProject}
