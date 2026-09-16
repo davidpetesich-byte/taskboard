@@ -392,20 +392,10 @@ export default function TicketPanel({
         className="relative flex max-h-[90vh] w-[min(64rem,100vw-3rem)] flex-col overflow-hidden rounded-lg bg-white text-slate-900 shadow-[0_16px_48px_rgba(9,30,66,0.28)]"
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-6 py-3">
-          <span className="text-xs font-medium text-slate-500">
-            {ticket.projectPrefix}-{ticket.number}
-          </span>
           <div className="flex items-center gap-1.5">
-            {dirty && (
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving || labelBusy}
-                className="mr-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
-              >
-                {saving ? "Saving…" : "Save changes"}
-              </button>
-            )}
+            <span className="text-xs font-medium text-slate-500">
+              {ticket.projectPrefix}-{ticket.number}
+            </span>
             <button
               type="button"
               aria-label="Delete ticket"
@@ -417,6 +407,18 @@ export default function TicketPanel({
             >
               <Trash2 aria-hidden="true" className="h-4 w-4" />
             </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {dirty && (
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || labelBusy}
+                className="mr-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+              >
+                {saving ? "Saving…" : "Save changes"}
+              </button>
+            )}
             <button type="button" aria-label="Close" onClick={onClose} className={iconButtonClass}>
               <X aria-hidden="true" className="h-5 w-5" />
             </button>
