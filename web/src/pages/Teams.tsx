@@ -113,15 +113,14 @@ export default function Teams() {
   const [editTeam, setEditTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
-    try {
-      const data = await api.teams.list();
-      setTeams(data || []);
-    } catch {
-      setTeams([]);
-    }
-    setLoading(false);
-  };
+  // State is set only in promise callbacks so the mount effect never updates
+  // state synchronously (react-hooks/set-state-in-effect).
+  const load = () =>
+    api.teams
+      .list()
+      .then((data) => setTeams(data || []))
+      .catch(() => setTeams([]))
+      .finally(() => setLoading(false));
 
   useEffect(() => {
     load();

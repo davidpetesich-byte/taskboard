@@ -62,23 +62,24 @@ export default function Tickets() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
 
-  const load = useCallback(async () => {
-    try {
-      const [t, p, tm] = await Promise.all([
-        api.tickets.list(),
-        api.projects.list(),
-        api.teams.list(),
-      ]);
-      setTickets(t || []);
-      setProjects(p || []);
-      setTeams(tm || []);
-    } catch {
-      setTickets([]);
-      setProjects([]);
-      setTeams([]);
-    }
-    setLoading(false);
-  }, []);
+  // State is set only in promise callbacks so the mount effect never updates
+  // state synchronously (react-hooks/set-state-in-effect).
+  const load = useCallback(
+    () =>
+      Promise.all([api.tickets.list(), api.projects.list(), api.teams.list()])
+        .then(([t, p, tm]) => {
+          setTickets(t || []);
+          setProjects(p || []);
+          setTeams(tm || []);
+        })
+        .catch(() => {
+          setTickets([]);
+          setProjects([]);
+          setTeams([]);
+        })
+        .finally(() => setLoading(false)),
+    []
+  );
 
   useEffect(() => {
     load();

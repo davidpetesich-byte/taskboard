@@ -103,13 +103,14 @@ export default function TerminalPanel({
     });
   }, []);
 
+  // Closing the socket fires ws.onclose, which clears `connected`; setting it
+  // here too would update state synchronously inside the isOpen effect.
   const disconnect = useCallback(() => {
     wsRef.current?.close();
     wsRef.current = null;
     xtermRef.current?.dispose();
     xtermRef.current = null;
     fitRef.current = null;
-    setConnected(false);
   }, []);
 
   useEffect(() => {

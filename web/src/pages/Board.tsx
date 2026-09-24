@@ -303,34 +303,41 @@ export default function Board() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  const loadBoard = useCallback(async () => {
+  // State is set only in promise callbacks so the load effect never updates
+  // state synchronously (react-hooks/set-state-in-effect).
+  const loadBoard = useCallback(() => {
     const requestGeneration = ++loadRequestGeneration.current;
+    const isCurrent = () => requestGeneration === loadRequestGeneration.current;
 
-    try {
-      const board = await api.board.get(selectedProject || undefined);
-      if (requestGeneration !== loadRequestGeneration.current) return;
+    return api.board
+      .get(selectedProject || undefined)
+      .then((board) => {
+        if (!isCurrent()) return;
 
-      const nextColumns = board.columns || [];
-      setColumns(nextColumns);
-      setFilterLabelId((current) =>
-        current &&
-        nextColumns.some((column) =>
-          column.tickets.some((ticket) =>
-            ticket.labels?.some((label) => label.id === current)
+        const nextColumns = board.columns || [];
+        setColumns(nextColumns);
+        setFilterLabelId((current) =>
+          current &&
+          nextColumns.some((column) =>
+            column.tickets.some((ticket) =>
+              ticket.labels?.some((label) => label.id === current)
+            )
           )
-        )
-          ? current
-          : null
-      );
-    } catch {
-      if (requestGeneration !== loadRequestGeneration.current) return;
+            ? current
+            : null
+        );
+      })
+      .catch(() => {
+        if (!isCurrent()) return;
 
-      setColumns(
-        STATUSES.map((status) => ({ status, tickets: [] }))
-      );
-      setFilterLabelId(null);
-    }
-    setLoading(false);
+        setColumns(
+          STATUSES.map((status) => ({ status, tickets: [] }))
+        );
+        setFilterLabelId(null);
+      })
+      .finally(() => {
+        if (isCurrent()) setLoading(false);
+      });
   }, [selectedProject]);
 
   useEffect(() => {
@@ -339,7 +346,6 @@ export default function Board() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
     loadBoard();
   }, [loadBoard]);
 
@@ -463,7 +469,12 @@ export default function Board() {
         <h1 className="text-lg font-semibold text-slate-900">Board</h1>
         <select
           value={selectedProject}
-          onChange={(e) => setSelectedProject(e.target.value)}
+          onChange={(e) => {
+            // Set here rather than in the load effect, which must not update
+            // state synchronously (react-hooks/set-state-in-effect).
+            setLoading(true);
+            setSelectedProject(e.target.value);
+          }}
           className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All Projects</option>
