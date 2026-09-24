@@ -400,7 +400,12 @@ export default function Board() {
         if (col.status === overStatus) {
           const ticket = findTicketById(active.id);
           if (!ticket) return col;
-          return { ...col, tickets: [...col.tickets, { ...ticket, status: overStatus }] };
+          const moved = { ...ticket, status: overStatus };
+          // Mirrors the server: Done lists the most recently finished first.
+          return {
+            ...col,
+            tickets: overStatus === "done" ? [moved, ...col.tickets] : [...col.tickets, moved],
+          };
         }
         return col;
       })

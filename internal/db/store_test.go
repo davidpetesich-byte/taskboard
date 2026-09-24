@@ -115,8 +115,8 @@ func TestOpenAtRunsMigrations(t *testing.T) {
 	if err := s.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("querying schema_migrations: %v", err)
 	}
-	if count != 3 {
-		t.Fatalf("expected 3 migrations applied, got %d", count)
+	if count != 4 {
+		t.Fatalf("expected 4 migrations applied, got %d", count)
 	}
 }
 
