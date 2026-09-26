@@ -286,8 +286,23 @@ func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tickets)
 }
 
+// getTicket accepts a ticket ID or a display key such as TCA-14, so a board
+// link can name the ticket the way people do.
 func (s *Server) getTicket(w http.ResponseWriter, r *http.Request) {
-	t, err := s.store.GetTicket(chi.URLParam(r, "id"))
+	id, err := s.store.ResolveTicketID(chi.URLParam(r, "id"))
+	if errors.Is(err, db.ErrTicketNotFound) {
+		writeError(w, http.StatusNotFound, "ticket not found")
+		return
+	}
+	if errors.Is(err, db.ErrTicketReferenceAmbiguous) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	t, err := s.store.GetTicket(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

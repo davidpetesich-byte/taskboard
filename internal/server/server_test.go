@@ -140,3 +140,31 @@ func TestUpdateTicketEndpointMovesTicketToAnotherProject(t *testing.T) {
 		t.Errorf("stored projectId = %q, want %q", stored.ProjectID, target.ID)
 	}
 }
+
+func TestGetTicketEndpointAcceptsDisplayKey(t *testing.T) {
+	ts, store := newTestAPI(t)
+	p, err := store.CreateProject(models.CreateProjectRequest{Name: "P", Prefix: "API"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := store.CreateTicket(models.CreateTicketRequest{ProjectID: p.ID, Title: "Keyed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, body := do(t, http.MethodGet, ts.URL+"/api/tickets/API-1", "")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("GET by key: status %d, body %s", res.StatusCode, body)
+	}
+	var got models.Ticket
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("decoding ticket: %v", err)
+	}
+	if got.ID != created.ID {
+		t.Errorf("GET by key returned %s, want %s", got.ID, created.ID)
+	}
+
+	if res, _ := do(t, http.MethodGet, ts.URL+"/api/tickets/API-99", ""); res.StatusCode != http.StatusNotFound {
+		t.Errorf("GET unknown key: status %d, want 404", res.StatusCode)
+	}
+}

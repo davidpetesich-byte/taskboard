@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   DndContext,
   DragOverlay,
@@ -34,6 +35,7 @@ import LabelChip from "../components/LabelChip";
 import { STATUSES, STATUS_LABELS } from "../constants/statuses";
 import { formatDueDate } from "../lib/dates";
 import { positionBetween } from "../lib/position";
+import { ticketKey } from "../lib/ticketLink";
 
 const PRIORITY_CONFIG: Record<string, { color: string; icon: typeof ArrowUp }> = {
   urgent: { color: "text-red-600", icon: AlertTriangle },
@@ -290,6 +292,23 @@ export default function Board() {
   const [loading, setLoading] = useState(true);
   const loadRequestGeneration = useRef(0);
   const dragOrigin = useRef<{ status: string; index: number } | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedKey = searchParams.get("ticket");
+
+  // The open ticket is mirrored in the address bar (?ticket=TCA-14) so the
+  // link can be copied; replace keeps opening tickets out of browser history.
+  const setLinkedKey = useCallback(
+    (key: string | null) =>
+      setSearchParams(
+        (params) => {
+          if (key) params.set("ticket", key);
+          else params.delete("ticket");
+          return params;
+        },
+        { replace: true }
+      ),
+    [setSearchParams]
+  );
 
   const labelsInPlay = useMemo(() => {
     const labelsById = new Map<string, Label>();
@@ -362,6 +381,23 @@ export default function Board() {
   useEffect(() => {
     loadBoard();
   }, [loadBoard]);
+
+  // Opening a board link loads its ticket; an unknown key is dropped.
+  useEffect(() => {
+    if (!linkedKey || selectedTicket) return;
+    let cancelled = false;
+    api.tickets
+      .get(linkedKey)
+      .then((ticket) => {
+        if (!cancelled) setSelectedTicket(ticket);
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedKey(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedKey, selectedTicket, setLinkedKey]);
 
   const getColumnTickets = (status: string) => {
     const tickets = columns.find((c) => c.status === status)?.tickets || [];
@@ -505,6 +541,7 @@ export default function Board() {
 
   const handleTicketClick = (ticket: Ticket) => {
     setSelectedTicket(ticket);
+    setLinkedKey(ticketKey(ticket));
   };
 
   const handleUpdate = async (id: string, data: TicketInput) => {
@@ -635,6 +672,7 @@ export default function Board() {
           teams={teams}
           onClose={() => {
             setSelectedTicket(null);
+            setLinkedKey(null);
             loadBoard();
           }}
           onUpdate={handleUpdate}

@@ -7,11 +7,25 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/tcarac/taskboard/internal/db"
 	"github.com/tcarac/taskboard/internal/models"
 )
+
+// ticketRef accepts what a person pastes for a ticket: an ID, a display key
+// such as TCA-14, or a board link such as http://localhost:3010/?ticket=TCA-14.
+func ticketRef(input string) string {
+	input = strings.TrimSpace(input)
+	if u, err := url.Parse(input); err == nil {
+		if key := u.Query().Get("ticket"); key != "" {
+			return key
+		}
+	}
+	return input
+}
 
 type MCPServer struct {
 	store *db.Store
@@ -253,7 +267,11 @@ func (s *MCPServer) callTool(name string, args json.RawMessage) (any, error) {
 			ID string `json:"id"`
 		}
 		json.Unmarshal(args, &a)
-		t, err := s.store.GetTicket(a.ID)
+		id, err := s.store.ResolveTicketID(ticketRef(a.ID))
+		if err != nil {
+			return nil, err
+		}
+		t, err := s.store.GetTicket(id)
 		if t == nil && err == nil {
 			return nil, fmt.Errorf("ticket not found")
 		}
@@ -534,9 +552,12 @@ func (s *MCPServer) toolDefinitions() []toolDef {
 			Name:        "get_ticket",
 			Description: "Get detailed ticket information including subtasks, labels, dependencies, and comments",
 			InputSchema: jsonSchema{
-				Type:       "object",
-				Properties: map[string]schemaProp{"id": {Type: "string", Description: "Ticket ID"}},
-				Required:   []string{"id"},
+				Type: "object",
+				Properties: map[string]schemaProp{"id": {
+					Type:        "string",
+					Description: "Ticket ID, display key such as TCA-14, or board link such as http://localhost:3010/?ticket=TCA-14",
+				}},
+				Required: []string{"id"},
 			},
 		},
 		{

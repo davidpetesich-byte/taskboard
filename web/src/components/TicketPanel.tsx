@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Trash2, CheckCircle2, Circle, Pencil, Eye, MessageSquare } from "lucide-react";
+import { X, Trash2, CheckCircle2, Circle, Pencil, Eye, MessageSquare, Link2, Check } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../api/client";
 import { STATUSES, STATUS_LABELS } from "../constants/statuses";
 import LabelPicker from "./LabelPicker";
+import { ticketKey, ticketLink } from "../lib/ticketLink";
 
 const PRIORITIES = ["urgent", "high", "medium", "low"];
 const POLL_MS = 3000;
@@ -122,6 +123,7 @@ export default function TicketPanel({
   const [labelBusy, setLabelBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
   const [remoteTicket, setRemoteTicket] = useState<Ticket | null>(null);
   const labelBusyRef = useRef(false);
   const savingRef = useRef(false);
@@ -396,6 +398,27 @@ export default function TicketPanel({
             <span className="text-xs font-medium text-slate-500">
               {ticket.projectPrefix}-{ticket.number}
             </span>
+            <button
+              type="button"
+              aria-label={linkCopied ? "Ticket link copied" : "Copy ticket link"}
+              title={linkCopied ? "Copied" : `Copy link to ${ticketKey(ticket)}`}
+              onClick={() => {
+                navigator.clipboard.writeText(ticketLink(ticket)).then(
+                  () => {
+                    setLinkCopied(true);
+                    window.setTimeout(() => setLinkCopied(false), 1500);
+                  },
+                  () => setSaveError("Could not copy the ticket link.")
+                );
+              }}
+              className={`${iconButtonClass} ${linkCopied ? "text-green-600" : ""}`}
+            >
+              {linkCopied ? (
+                <Check aria-hidden="true" className="h-4 w-4" />
+              ) : (
+                <Link2 aria-hidden="true" className="h-4 w-4" />
+              )}
+            </button>
             <button
               type="button"
               aria-label="Delete ticket"
