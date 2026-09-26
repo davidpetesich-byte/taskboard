@@ -6,13 +6,16 @@ import {
   useSensor,
   useSensors,
   useDroppable,
-  useDraggable,
   closestCorners,
+  pointerWithin,
+  type CollisionDetection,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
   type UniqueIdentifier,
 } from "@dnd-kit/core";
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Calendar,
   AlertTriangle,
@@ -30,6 +33,7 @@ import CreateTicketModal from "../components/CreateTicketModal";
 import LabelChip from "../components/LabelChip";
 import { STATUSES, STATUS_LABELS } from "../constants/statuses";
 import { formatDueDate } from "../lib/dates";
+import { positionBetween } from "../lib/position";
 
 const PRIORITY_CONFIG: Record<string, { color: string; icon: typeof ArrowUp }> = {
   urgent: { color: "text-red-600", icon: AlertTriangle },
@@ -168,6 +172,12 @@ function TicketCard({
   );
 }
 
+// Where a card dropped on a column's open space lands, mirroring the server:
+// Done lists the most recently finished first, other columns append.
+function columnEdgeIndex(status: string, end: number): number {
+  return status === "done" ? 0 : end;
+}
+
 function DraggableTicket({
   ticket,
   projects,
@@ -179,7 +189,7 @@ function DraggableTicket({
   teams: Team[];
   onClick: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: ticket.id,
     data: { ticket },
   });
@@ -187,6 +197,7 @@ function DraggableTicket({
   return (
     <div
       ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       {...listeners}
       {...attributes}
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
@@ -246,15 +257,17 @@ function Column({
           isOver ? "ring-2 ring-inset ring-blue-500" : ""
         }`}
       >
-        {tickets.map((ticket) => (
-          <DraggableTicket
-            key={ticket.id}
-            ticket={ticket}
-            projects={projects}
-            teams={teams}
-            onClick={() => onTicketClick(ticket)}
-          />
-        ))}
+        <SortableContext items={tickets.map((ticket) => ticket.id)} strategy={verticalListSortingStrategy}>
+          {tickets.map((ticket) => (
+            <DraggableTicket
+              key={ticket.id}
+              ticket={ticket}
+              projects={projects}
+              teams={teams}
+              onClick={() => onTicketClick(ticket)}
+            />
+          ))}
+        </SortableContext>
         {tickets.length === 0 && (
           <div className="flex h-24 items-center justify-center rounded-[5px] border border-dashed border-slate-300 text-xs text-slate-500">
             Drop tickets here
@@ -276,6 +289,7 @@ export default function Board() {
   const [filterLabelId, setFilterLabelId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const loadRequestGeneration = useRef(0);
+  const dragOrigin = useRef<{ status: string; index: number } | null>(null);
 
   const labelsInPlay = useMemo(() => {
     const labelsById = new Map<string, Label>();
@@ -375,9 +389,34 @@ export default function Board() {
     return undefined;
   };
 
+  const columnStatusFor = (id: UniqueIdentifier): string | undefined =>
+    STATUSES.includes(id as string) ? (id as string) : findColumnByTicketId(id);
+
+  // A card under the pointer is the drop target. Open space below a column's
+  // cards, or an empty column, targets the column itself; gaps between cards
+  // fall back to the nearest target.
+  const collisionDetection: CollisionDetection = (args) => {
+    const hits = pointerWithin(args);
+    const card = hits.find((hit) => !STATUSES.includes(hit.id as string));
+    if (card) return [card];
+
+    const column = hits.find((hit) => STATUSES.includes(hit.id as string));
+    const pointerY = args.pointerCoordinates?.y;
+    if (column && pointerY !== undefined) {
+      const cardBottoms = (columns.find((c) => c.status === column.id)?.tickets ?? []).map(
+        (t) => args.droppableRects.get(t.id)?.bottom ?? -Infinity
+      );
+      if (pointerY > Math.max(-Infinity, ...cardBottoms)) return [column];
+    }
+    return closestCorners(args);
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     const ticket = findTicketById(event.active.id);
     setActiveTicket(ticket ?? null);
+    const status = findColumnByTicketId(event.active.id);
+    const index = columns.find((c) => c.status === status)?.tickets.findIndex((t) => t.id === event.active.id);
+    dragOrigin.current = status !== undefined && index !== undefined ? { status, index } : null;
   };
 
   const clearActiveDrag = () => setActiveTicket(null);
@@ -387,16 +426,22 @@ export default function Board() {
     loadBoard();
   };
 
+  // Crossing into another column inserts the card where the pointer is; moves
+  // within a column are animated by the sortable list and applied on drop.
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
 
     const activeStatus = findColumnByTicketId(active.id);
-    const overStatus = STATUSES.includes(over.id as string)
-      ? (over.id as string)
-      : findColumnByTicketId(over.id);
+    const overStatus = columnStatusFor(over.id);
 
     if (!activeStatus || !overStatus || activeStatus === overStatus) return;
+
+    const ticket = findTicketById(active.id);
+    if (!ticket) return;
+    const moved = { ...ticket, status: overStatus };
+    const translated = active.rect.current.translated;
+    const belowOver = translated !== null && translated.top > over.rect.top + over.rect.height / 2;
 
     setColumns((prev) =>
       prev.map((col) => {
@@ -404,14 +449,12 @@ export default function Board() {
           return { ...col, tickets: col.tickets.filter((t) => t.id !== active.id) };
         }
         if (col.status === overStatus) {
-          const ticket = findTicketById(active.id);
-          if (!ticket) return col;
-          const moved = { ...ticket, status: overStatus };
-          // Mirrors the server: Done lists the most recently finished first.
-          return {
-            ...col,
-            tickets: overStatus === "done" ? [moved, ...col.tickets] : [...col.tickets, moved],
-          };
+          const overIndex = col.tickets.findIndex((t) => t.id === over.id);
+          const index =
+            overIndex >= 0 ? overIndex + (belowOver ? 1 : 0) : columnEdgeIndex(overStatus, col.tickets.length);
+          const tickets = [...col.tickets];
+          tickets.splice(index, 0, moved);
+          return { ...col, tickets };
         }
         return col;
       })
@@ -420,24 +463,41 @@ export default function Board() {
 
   const handleDragEnd = async (event: DragEndEvent) => {
     clearActiveDrag();
+    const origin = dragOrigin.current;
+    dragOrigin.current = null;
     const { active, over } = event;
 
-    if (!over) {
+    const status = over ? findColumnByTicketId(active.id) : undefined;
+    const column = columns.find((c) => c.status === status);
+    if (!over || !status || !column) {
       loadBoard();
       return;
     }
 
-    const targetStatus = STATUSES.includes(over.id as string)
-      ? (over.id as string)
-      : findColumnByTicketId(over.id);
+    const fromIndex = column.tickets.findIndex((t) => t.id === active.id);
+    const overIndex = column.tickets.findIndex((t) => t.id === over.id);
+    const toIndex =
+      overIndex >= 0
+        ? overIndex
+        : over.id === status
+          ? columnEdgeIndex(status, column.tickets.length - 1)
+          : fromIndex;
+    const tickets = arrayMove(column.tickets, fromIndex, toIndex);
+    const index = tickets.findIndex((t) => t.id === active.id);
 
-    if (!targetStatus) {
-      loadBoard();
-      return;
-    }
+    if (origin && origin.status === status && origin.index === index) return;
+
+    const position = positionBetween(tickets[index - 1]?.position, tickets[index + 1]?.position);
+    setColumns((prev) =>
+      prev.map((col) =>
+        col.status === status
+          ? { ...col, tickets: tickets.map((t) => (t.id === active.id ? { ...t, position } : t)) }
+          : col
+      )
+    );
 
     try {
-      await api.tickets.move(active.id as string, targetStatus);
+      await api.tickets.move(active.id as string, status, position);
     } catch {
       loadBoard();
     }
@@ -528,7 +588,7 @@ export default function Board() {
         ) : (
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={collisionDetection}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}

@@ -63,14 +63,30 @@ type queryRower interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
-// doneTopPosition returns where ticket id belongs in Done: its current
-// position if it is already there, otherwise above every Done ticket.
-func doneTopPosition(q queryRower, id string) (float64, error) {
+// columnEdgeSQL selects where a new arrival lands in a column across every
+// project: above all of Done, or below everything in any other column.
+func columnEdgeSQL(status string) string {
+	if status == doneStatus {
+		return "SELECT MIN(position) - 1000 FROM tickets WHERE status = ?"
+	}
+	return "SELECT MAX(position) + 1000 FROM tickets WHERE status = ?"
+}
+
+// columnEdgePosition returns where a ticket arriving in status belongs.
+func columnEdgePosition(q queryRower, status string) (float64, error) {
+	var position float64
+	err := q.QueryRow("SELECT COALESCE(("+columnEdgeSQL(status)+"), 0)", status).Scan(&position)
+	return position, err
+}
+
+// columnEntryPosition returns where ticket id belongs in status: its current
+// position if it is already there, otherwise the column's arrival edge.
+func columnEntryPosition(q queryRower, id, status string) (float64, error) {
 	var position float64
 	err := q.QueryRow(`SELECT COALESCE(
-		(SELECT position FROM tickets WHERE id = ? AND status = 'done'),
-		(SELECT MIN(position) FROM tickets WHERE status = 'done') - 1000,
-		0)`, id).Scan(&position)
+		(SELECT position FROM tickets WHERE id = ? AND status = ?),
+		(`+columnEdgeSQL(status)+`),
+		0)`, id, status, status).Scan(&position)
 	return position, err
 }
 
@@ -432,14 +448,11 @@ func (s *Store) CreateTicket(req models.CreateTicketRequest) (*models.Ticket, er
 		Description: req.Description,
 		Status:      status,
 		Priority:    priority,
-		Position:    float64(num) * 1000,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
-	if status == doneStatus {
-		if t.Position, err = doneTopPosition(s.db, t.ID); err != nil {
-			return nil, fmt.Errorf("finding top of done: %w", err)
-		}
+	if t.Position, err = columnEdgePosition(s.db, status); err != nil {
+		return nil, fmt.Errorf("finding board position: %w", err)
 	}
 
 	if req.DueDate != nil {
@@ -586,9 +599,9 @@ func (s *Store) updateTicket(id string, req models.UpdateTicketRequest, addLabel
 			setClauses = append(setClauses, "project_id=?", "number=?")
 			args = append(args, *req.ProjectID, number)
 
-			// The old position ordered the ticket against a different project's
-			// board, so re-place it at the bottom of the target column unless the
-			// caller asked for a specific position.
+			// A ticket arriving from another project is placed like any new
+			// arrival, unless the caller asked for a specific position. Done
+			// keeps a ticket that is already there in place.
 			if req.Position == nil {
 				status := currentStatus
 				if req.Status != nil {
@@ -596,13 +609,11 @@ func (s *Store) updateTicket(id string, req models.UpdateTicketRequest, addLabel
 				}
 				var position float64
 				if status == doneStatus {
-					if position, err = doneTopPosition(tx, id); err != nil {
-						return nil, fmt.Errorf("finding top of done: %w", err)
-					}
-				} else if err := tx.QueryRow(
-					"SELECT COALESCE(MAX(position), 0) + 1000 FROM tickets WHERE project_id = ? AND status = ?",
-					*req.ProjectID, status,
-				).Scan(&position); err != nil {
+					position, err = columnEntryPosition(tx, id, status)
+				} else {
+					position, err = columnEdgePosition(tx, status)
+				}
+				if err != nil {
 					return nil, fmt.Errorf("finding target board position: %w", err)
 				}
 				setClauses = append(setClauses, "position=?")
@@ -613,10 +624,10 @@ func (s *Store) updateTicket(id string, req models.UpdateTicketRequest, addLabel
 	}
 
 	// A project move above already placed the ticket.
-	if req.Status != nil && *req.Status == doneStatus && req.Position == nil && !moving {
-		position, err := doneTopPosition(tx, id)
+	if req.Status != nil && req.Position == nil && !moving {
+		position, err := columnEntryPosition(tx, id, *req.Status)
 		if err != nil {
-			return nil, fmt.Errorf("finding top of done: %w", err)
+			return nil, fmt.Errorf("finding board position: %w", err)
 		}
 		setClauses = append(setClauses, "position=?")
 		args = append(args, position)
@@ -682,18 +693,14 @@ func (s *Store) updateTicket(id string, req models.UpdateTicketRequest, addLabel
 
 func (s *Store) MoveTicket(id string, req models.MoveTicketRequest) (*models.Ticket, error) {
 	now := time.Now()
-	position := float64(0)
+	var position float64
 	if req.Position != nil {
 		position = *req.Position
-	} else if req.Status == doneStatus {
-		var err error
-		if position, err = doneTopPosition(s.db, id); err != nil {
-			return nil, fmt.Errorf("finding top of done: %w", err)
-		}
 	} else {
-		var maxPos float64
-		s.db.QueryRow("SELECT COALESCE(MAX(position), 0) + 1000 FROM tickets WHERE status = ?", req.Status).Scan(&maxPos)
-		position = maxPos
+		var err error
+		if position, err = columnEntryPosition(s.db, id, req.Status); err != nil {
+			return nil, fmt.Errorf("finding board position: %w", err)
+		}
 	}
 
 	_, err := s.db.Exec("UPDATE tickets SET status=?, position=?, updated_at=? WHERE id=?",
