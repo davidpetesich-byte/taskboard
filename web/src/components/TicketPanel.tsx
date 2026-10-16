@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Trash2, CheckCircle2, Circle, Pencil, Eye, MessageSquare, Link2, Check } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markdownComponents } from "../lib/markdown";
 import {
   api,
   type Ticket,
@@ -518,7 +519,7 @@ export default function TicketPanel({
                   />
                 ) : description ? (
                   <div className="prose-doc rounded-md bg-slate-50 px-4 py-3">
-                    <Markdown remarkPlugins={[remarkGfm]}>{description}</Markdown>
+                    <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{description}</Markdown>
                   </div>
                 ) : (
                   <button
@@ -561,7 +562,7 @@ export default function TicketPanel({
                           </button>
                         </div>
                         <div className="prose-doc">
-                          <Markdown remarkPlugins={[remarkGfm]}>{c.body}</Markdown>
+                          <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{c.body}</Markdown>
                         </div>
                       </li>
                     ))}

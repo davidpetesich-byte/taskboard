@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, X, FolderKanban, ChevronDown, ChevronUp } from "lucide-react";
 import Markdown from "react-markdown";
+import { markdownComponents } from "../lib/markdown";
 import { api, type Project } from "../api/client";
 import ConfirmDialog from "../components/ConfirmDialog";
 
@@ -308,7 +309,7 @@ export default function Projects() {
                         expandedDescs.has(project.id) ? "" : "line-clamp-4"
                       }`}
                     >
-                      <Markdown>{project.description}</Markdown>
+                      <Markdown components={markdownComponents}>{project.description}</Markdown>
                     </div>
                     <button
                       onClick={(e) => {
